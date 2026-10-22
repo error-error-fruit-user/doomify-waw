@@ -130,8 +130,9 @@ def armature(objects):
 
 
 def action(rig, clip):
-    """The imported clip; names match ignoring case, as in the game."""
-    wanted = {f"{clip}_{rig.name}".lower(), clip.lower()}
+    """The imported clip; names match ignoring case, as in the game, and Blender cuts names
+    (the importer's "<clip>_<armature>") at 63 bytes."""
+    wanted = {name.lower()[:63] for name in (f"{clip}_{rig.name}", clip)}
     for found in bpy.data.actions:
         if found.name.lower() in wanted:
             return found

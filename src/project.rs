@@ -151,15 +151,15 @@ impl Project {
         }
     }
 
-    /// The cache folder for a TOML: its id and a hash of its text and of the scene and script
-    /// that render it, so a change to any of them renders it again.
+    /// The cache folder for a TOML: its id and a hash of its text, the scene and the render
+    /// version, so a change to any of them renders it again.
     pub fn keyed(&self, id: &str, file: &Path) -> String {
         let text = fs::read(file).unwrap_or_default();
         // FNV-1a: stable across runs and platforms, which std's hasher is not
         let hash = [
             &text[..],
             crate::blender::SCENE,
-            crate::blender::SCRIPT.as_bytes(),
+            crate::blender::RENDER_VERSION.as_bytes(),
         ]
         .iter()
         .flat_map(|part| part.iter())

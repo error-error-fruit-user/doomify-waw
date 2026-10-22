@@ -34,6 +34,9 @@ const PAGES: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 /// The canvas's top left on Doom's 320x200 weapon screen (see weapon.blend): 80 pixels left of
 /// it, and the weapon's resting height (WEAPONTOP) above.
 const WEAPON_OFFSET: (i32, i32) = (80, 32);
+/// Specks smaller than this (in pixels, their border included) are dropped: thin parts like the
+/// Wunderwaffe's coil wires break up into them at sprite size.
+const SPECK: usize = 10;
 /// Wall drawings are scaled to this width and drawn at half size.
 const CHALK_WIDTH: u32 = 128;
 
@@ -46,6 +49,44 @@ pub struct Sprites {
 
 fn putpng(result: std::result::Result<(), Box<dyn std::error::Error>>, path: &Path) -> Result<()> {
     result.map_err(|e| anyhow!("putpng failed on {}: {e}", path.display()))
+}
+
+/// Clears islands of fewer than `SPECK` visible pixels (8-connected) that aren't part of the rest.
+fn despeckle(image: &mut RgbaImage) {
+    let (width, height) = image.dimensions();
+    let (w, h) = (width as usize, height as usize);
+    let mut seen = vec![false; w * h];
+    let mut stack = vec![];
+    for start in 0..w * h {
+        if seen[start] || image.as_raw()[start * 4 + 3] == 0 {
+            continue;
+        }
+        seen[start] = true;
+        stack.push(start);
+        let mut island = vec![];
+        while let Some(at) = stack.pop() {
+            island.push(at);
+            let (x, y) = ((at % w) as i64, (at / w) as i64);
+            for dy in -1..=1 {
+                for dx in -1..=1 {
+                    let (nx, ny) = (x + dx, y + dy);
+                    if nx < 0 || ny < 0 || nx >= w as i64 || ny >= h as i64 {
+                        continue;
+                    }
+                    let next = ny as usize * w + nx as usize;
+                    if !seen[next] && image.as_raw()[next * 4 + 3] != 0 {
+                        seen[next] = true;
+                        stack.push(next);
+                    }
+                }
+            }
+        }
+        if island.len() < SPECK {
+            for at in island {
+                image.put_pixel((at % w) as u32, (at / w) as u32, image::Rgba([0, 0, 0, 0]));
+            }
+        }
+    }
 }
 
 impl Sprites {
@@ -90,9 +131,10 @@ impl Sprites {
         let mut frames = vec![];
         for index in 0..count {
             let path = folder.join(format!("{index:04}.png"));
-            let image = image::open(&path)
+            let mut image = image::open(&path)
                 .with_context(|| format!("Cannot read the render {}", path.display()))?
                 .to_rgba8();
+            despeckle(&mut image);
             if image.pixels().all(|p| p.0[3] == 0) {
                 frames.push(Frame::Empty);
                 continue;
@@ -169,4 +211,24 @@ pub fn existing(folders: &[PathBuf]) -> Result<Vec<String>> {
     names.sort();
     names.dedup();
     Ok(names)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn specks_go_and_the_weapon_stays() {
+        let mut image = RgbaImage::new(20, 10);
+        for x in 0..12 {
+            for y in 4..8 {
+                image.put_pixel(x, y, image::Rgba([9, 9, 9, 255]));
+            }
+        }
+        image.put_pixel(17, 1, image::Rgba([9, 9, 9, 255]));
+        image.put_pixel(18, 1, image::Rgba([9, 9, 9, 255]));
+        despeckle(&mut image);
+        assert_eq!(image.get_pixel(17, 1).0[3], 0);
+        assert_eq!(image.get_pixel(5, 5).0[3], 255);
+    }
 }
