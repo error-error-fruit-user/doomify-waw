@@ -15,15 +15,28 @@ use std::{
 /// One frame of a sequence: its sprite and frame letter, or nothing to draw.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Frame {
-    Sprite { name: String, letter: char },
+    /// `area` is how many pixels show.
+    Sprite {
+        name: String,
+        letter: char,
+        area: usize,
+    },
     Empty,
 }
 
 impl Frame {
+    /// How many pixels show (0 for nothing).
+    pub fn area(&self) -> usize {
+        match self {
+            Self::Sprite { area, .. } => *area,
+            Self::Empty => 0,
+        }
+    }
+
     /// As a state writes it: `THF0 A`, or `TNT1 A`.
     pub fn state(&self) -> (String, char) {
         match self {
-            Self::Sprite { name, letter } => (name.clone(), *letter),
+            Self::Sprite { name, letter, .. } => (name.clone(), *letter),
             Self::Empty => ("TNT1".into(), 'A'),
         }
     }
@@ -122,7 +135,54 @@ impl Sprites {
             putpng::grab::grab(&path, &self.crc, offset.0, offset.1),
             &path,
         )?;
-        putpng(putpng::crop::crop(&path, &self.crc), &path)
+        putpng(putpng::crop::crop(&path, &self.crc), &path)?;
+        self.compact(&path)
+    }
+
+    /// Re-encodes a cropped sprite as Doom's are, 8-bit: up to 255 colours of its own and one
+    /// transparent, at the best compression, keeping putpng's offset.
+    fn compact(&self, path: &Path) -> Result<()> {
+        let grab = putpng::grab::read_grab(path)
+            .map_err(|e| anyhow!("Cannot read the offset of {}: {e}", path.display()))?
+            .unwrap_or_default();
+        let image = image::open(path)?.to_rgba8();
+        let (width, height) = image.dimensions();
+        let opaque: Vec<u8> = image
+            .pixels()
+            .filter(|p| p.0[3] != 0)
+            .flat_map(|p| [p.0[0], p.0[1], p.0[2], 255])
+            .collect();
+        // Index 0 is transparent; the colours come after it.
+        let quantizer = color_quant::NeuQuant::new(10, 255, &opaque);
+        let mut palette = vec![0u8, 0, 0];
+        palette.extend(quantizer.color_map_rgb());
+        let indices: Vec<u8> = image
+            .pixels()
+            .map(|p| {
+                if p.0[3] == 0 {
+                    0
+                } else {
+                    quantizer.index_of(&[p.0[0], p.0[1], p.0[2], 255]) as u8 + 1
+                }
+            })
+            .collect();
+        let mut bytes = vec![];
+        {
+            let mut encoder = png::Encoder::new(&mut bytes, width, height);
+            encoder.set_color(png::ColorType::Indexed);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder.set_palette(palette);
+            encoder.set_trns(vec![0u8]);
+            encoder.set_compression(png::Compression::Best);
+            encoder.set_filter(png::FilterType::NoFilter);
+            let mut writer = encoder.write_header()?;
+            writer.write_image_data(&indices)?;
+        }
+        fs::write(path, bytes)?;
+        putpng(
+            putpng::grab::push_grab(path, &self.crc, grab.0, grab.1),
+            path,
+        )
     }
 
     /// The frames of one render (`folder` holds `0000.png`...; `count` of them) as a sequence.
@@ -145,7 +205,8 @@ impl Sprites {
             let name = format!("{}{role}{page}", self.code);
             let letter = (b'A' + (index % 26) as u8) as char;
             self.write(&image, &name, letter, WEAPON_OFFSET)?;
-            frames.push(Frame::Sprite { name, letter });
+            let area = image.pixels().filter(|p| p.0[3] != 0).count();
+            frames.push(Frame::Sprite { name, letter, area });
         }
         Ok(frames)
     }
@@ -164,7 +225,12 @@ impl Sprites {
         let name = format!("{}{role}0", self.code);
         let (width, height) = image.dimensions();
         self.write(&image, &name, 'A', (width as i32 / 2, height as i32))?;
-        Ok(Frame::Sprite { name, letter: 'A' })
+        let area = (width * height) as usize;
+        Ok(Frame::Sprite {
+            name,
+            letter: 'A',
+            area,
+        })
     }
 
     /// The wall drawing: the game's chalk image scaled down, centred.
@@ -182,7 +248,12 @@ impl Sprites {
         let name = format!("{}{role}0", self.code);
         let (width, height) = scaled.dimensions();
         self.write(&scaled, &name, 'A', (width as i32 / 2, height as i32 / 2))?;
-        Ok(Frame::Sprite { name, letter: 'A' })
+        let area = (width * height) as usize;
+        Ok(Frame::Sprite {
+            name,
+            letter: 'A',
+            area,
+        })
     }
 }
 

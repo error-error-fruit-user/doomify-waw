@@ -3,7 +3,7 @@
 
 use crate::{
     code::Code,
-    plan::variant,
+    plan::{self, variant},
     project::Project,
     script::Pulled,
     sprites::Frame,
@@ -110,12 +110,14 @@ impl Built<'_> {
     }
 
     /// A still pose's frame as `SPRT A`. Equipment World at War keeps off screen until it is
-    /// used (grenades, the monkey, the knife) is held as it is about to be thrown or swung.
+    /// used (grenades, the monkey, the knife) is held as its throw or swing shows it most.
     fn still(&self, render: &str) -> String {
         let mut frame = self.get(render).first().cloned().unwrap_or(Frame::Empty);
         if frame == Frame::Empty && render.starts_with("idle") {
+            // the throw's frame that shows most of it: wound up, the thing in hand
             frame = visible(self.get("fire"))
-                .first()
+                .iter()
+                .max_by_key(|f| f.area())
                 .cloned()
                 .unwrap_or(Frame::Empty);
         }
@@ -257,30 +259,26 @@ fn states(project: &Project, built: &Built) -> Code {
     let thrown = matches!(weapon.kind, Kind::Grenade | Kind::Monkey | Kind::Mine);
     let melee = weapon.kind == Kind::Melee;
     let gun = !thrown && !melee;
-    let aims = gun && built.has(&variant("ads_idle", tesla.then_some(weapon.ammo.magazine)));
-    let counts: Vec<Option<u32>> = if tesla {
-        (0..=weapon.ammo.magazine).rev().map(Some).collect()
-    } else {
-        vec![None]
-    };
-    // The Wunderwaffe's labels end in how many rounds its bulbs show: Idle3, Idle2...
+    let aims = gun && built.has(&variant("ads_idle", plan::full(weapon)));
+    let counts = plan::lit_counts(weapon);
+    // The Wunderwaffe's labels end in how many of its bulbs glow: Idle3, Idle2...
     let label = |base: &str, lit: Option<u32>| match lit {
         Some(n) => format!("{base}{n}"),
         None => base.to_owned(),
     };
+    // Every round count goes to the pose with as many bulbs lit as it shows
     let dispatch = |code: Code, base: &str| {
         code.when(tesla, |code| {
-            code.each(&counts, |code, lit| {
+            code.each(0..=weapon.ammo.magazine, |code, rounds| {
                 code.always(format!(
-                    "TNT1 A 0 WhenActiveAmmo({}, \"{}\");",
-                    lit.unwrap_or(0),
-                    label(base, *lit)
+                    "TNT1 A 0 WhenActiveAmmo({rounds}, \"{}\");",
+                    label(base, Some(plan::lit(weapon, rounds)))
                 ))
             })
         })
     };
     let pickup = built.pickup.clone().unwrap_or(Frame::Empty).state();
-    let full = tesla.then_some(weapon.ammo.magazine);
+    let full = plan::full(weapon);
 
     Code::new()
         .always("Spawn:")
@@ -400,12 +398,8 @@ fn gun_states(
     let weapon = built.weapon;
     let tesla = weapon.kind == Kind::Tesla;
     let flame = weapon.kind == Kind::Flame;
-    // The Wunderwaffe's shot is named by what is left after it: Fire2 with three rounds.
-    let shots: Vec<Option<u32>> = counts
-        .iter()
-        .copied()
-        .filter(|c| *c != Some(weapon.ammo.magazine))
-        .collect();
+    // The Wunderwaffe's shot is named by the bulbs lit after it: Fire2 from three rounds of three.
+    let shots = plan::shot_counts(weapon);
     let fire_label = |aimed: bool, lit: Option<u32>| {
         let base = if aimed { "ZoomFire" } else { "Fire" };
         match lit {
@@ -425,11 +419,10 @@ fn gun_states(
                     code.always("TNT1 A 0 WhenLastActiveAmmo(\"LastFire\");")
                 })
                 .when(tesla, |code| {
-                    code.each(&shots, |code, lit| {
+                    code.each(1..=weapon.ammo.magazine, |code, rounds| {
                         code.always(format!(
-                            "TNT1 A 0 WhenActiveAmmo({}, \"{}\");",
-                            lit.unwrap_or(0) + 1,
-                            fire_label(false, *lit)
+                            "TNT1 A 0 WhenActiveAmmo({rounds}, \"{}\");",
+                            fire_label(false, Some(plan::lit(weapon, rounds - 1)))
                         ))
                     })
                 })
@@ -511,7 +504,7 @@ fn gun_states(
 
 fn reload_states(built: &Built) -> Code {
     let weapon = built.weapon;
-    let full = (weapon.kind == Kind::Tesla).then_some(weapon.ammo.magazine);
+    let full = plan::full(weapon);
     let reload = variant("reload", full);
     let reload_empty = variant("reload_empty", full);
     Code::new()
@@ -615,12 +608,11 @@ fn aim_states(
         None => base.to_owned(),
     };
     let dispatch = |code: Code, base: &str| {
-        code.each(counts, |code, lit| {
+        code.each(0..=weapon.ammo.magazine, |code, rounds| {
             code.when(tesla, |code| {
                 code.always(format!(
-                    "TNT1 A 0 WhenActiveAmmo({}, \"{}\");",
-                    lit.unwrap_or(0),
-                    label(base, *lit)
+                    "TNT1 A 0 WhenActiveAmmo({rounds}, \"{}\");",
+                    label(base, Some(plan::lit(weapon, rounds)))
                 ))
             })
         })
@@ -694,11 +686,10 @@ fn aim_states(
                 code.always("TNT1 A 0 WhenLastActiveAmmo(\"ZoomLastFire\");")
             })
             .when(tesla, |code| {
-                code.each(shots, |code, lit| {
+                code.each(1..=weapon.ammo.magazine, |code, rounds| {
                     code.always(format!(
-                        "TNT1 A 0 WhenActiveAmmo({}, \"{}\");",
-                        lit.unwrap_or(0) + 1,
-                        fire_label(true, *lit)
+                        "TNT1 A 0 WhenActiveAmmo({rounds}, \"{}\");",
+                        fire_label(true, Some(plan::lit(weapon, rounds - 1)))
                     ))
                 })
             })

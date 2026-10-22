@@ -10,11 +10,13 @@ license = "0BSD"
 [dependencies]
 anyhow = "1"
 clap = { version = "4.5", features = ["derive"] }
+color_quant = "1"
 glob = "0.3"
 # The hell-hound checkout next to this one (a git dependency once it is published)
 hell-hound = { path = "../hell-hound" }
 image = { version = "0.25", default-features = false, features = ["png"] }
 indoc = "2"
+png = "0.17"
 putpng = "1.0.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

@@ -167,9 +167,9 @@ fn assemble(project: &Project, ids: &[String], work: &Path) -> Result<()> {
         pulls.insert(folder.clone(), pulled);
     }
 
-    // Sprites and code, weapon by weapon.
-    let mut built = vec![];
-    for id in ids {
+    // Sprites and code, a weapon per core at a time.
+    let one = |index: usize| -> Result<Built> {
+        let id = &ids[index];
         let weapon = &project.weapons[id];
         let key = project.keyed(id, &project.weapon_file(id));
         let pulled = &pulls[&work.join("pull").join(&key)];
@@ -212,7 +212,7 @@ fn assemble(project: &Project, ids: &[String], work: &Path) -> Result<()> {
                 );
             }
         }
-        built.push(Built {
+        Ok(Built {
             id,
             weapon,
             pulled,
@@ -220,8 +220,36 @@ fn assemble(project: &Project, ids: &[String], work: &Path) -> Result<()> {
             pickup,
             chalk,
             upgrade_built: weapon.upgrade.as_ref().is_some_and(|u| ids.contains(u)),
-        });
-    }
+        })
+    };
+    let cores = std::thread::available_parallelism().map_or(4, |n| n.get());
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let mut results: Vec<(usize, Result<Built>)> = std::thread::scope(|scope| {
+        let workers: Vec<_> = (0..cores.min(ids.len()))
+            .map(|_| {
+                scope.spawn(|| {
+                    let mut done = vec![];
+                    loop {
+                        let index = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        if index >= ids.len() {
+                            break;
+                        }
+                        done.push((index, one(index)));
+                    }
+                    done
+                })
+            })
+            .collect();
+        workers
+            .into_iter()
+            .flat_map(|worker| worker.join().expect("a sprite worker panicked"))
+            .collect()
+    });
+    results.sort_by_key(|(index, _)| *index);
+    let built = results
+        .into_iter()
+        .map(|(_, built)| built)
+        .collect::<Result<Vec<_>>>()?;
 
     for (path, text) in generate::files(project, &built, &sounds) {
         let target = out.join(&path);
