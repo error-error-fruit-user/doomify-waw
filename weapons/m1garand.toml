@@ -44,6 +44,7 @@ ads_down = "viewmodel_m1garand_ads_down"
 [sounds]
 fire = "weap_m1garand_fire_plr"
 last_fire = "weap_m1garand_lastshot_plr"
+eject = "weap_m1garand_clip_plr"
 dry = "dryfire_rifle_plr"
 raise = "weap_raise_plr"
 first_raise = "weap_raise_plr"

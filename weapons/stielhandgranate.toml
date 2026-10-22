@@ -31,3 +31,7 @@ drop = "viewmodel_germangrenade_idle"
 throw = "foley_throw"
 raise = "weap_raise_plr"
 bounce = "grenade_bounce_default"
+
+[view]
+# World at War keeps it off screen; held as the throw raises it
+hold_frame = 2

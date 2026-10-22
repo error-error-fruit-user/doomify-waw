@@ -12,7 +12,7 @@ use std::{
 pub const SCENE: &[u8] = include_bytes!("../blender/weapon.blend");
 /// What the scene and script render: raise it when a change to either changes the frames, so
 /// cached renders are made again (other changes to the script keep them).
-pub const RENDER_VERSION: &str = "1";
+pub const RENDER_VERSION: &str = "2";
 /// The script that pulls with `--script` and renders.
 pub const SCRIPT: &str = include_str!("../blender/render.py");
 

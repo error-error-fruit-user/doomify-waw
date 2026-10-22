@@ -1,0 +1,20 @@
+# Speed Cola: Der Riese's zombie_perk_bottle_sleight, drunk as the game drinks it. The map's own machine
+# sells it (its drink is the class <prefix>_SpeedColaDrink).
+name = "Speed Cola"
+class = "SpeedCola"
+sprite = "SC"
+kind = "drink"
+perk = "SpeedCola"
+
+[game]
+weapon = "zombie_perk_bottle_sleight"
+models = ["viewmodel_hands", "zombie_perk_bottle_sleight"]
+world = "zombie_3rd_perk_bottle_sleight"
+
+[fire]
+time = 2
+
+[animations]
+idle = "viewmodel_zombie_perksacola_idle"
+raise = "viewmodel_zombie_perksacola_drink"
+drop = "viewmodel_zombie_perksacola_lower"

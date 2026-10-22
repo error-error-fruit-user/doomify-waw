@@ -276,7 +276,7 @@ pub fn weapon(p: &str) -> String {
                 let things = BlockThingsIterator.Create(self, self.range);
                 while (things.Next()) {{
                     let thing = things.thing;
-                    if (thing == null || !thing.bIsMonster || thing.health <= 0 || self.struck.Find(thing) != self.struck.Size()) {{
+                    if (!{p}_TeslaArc.Strikable(thing) || self.struck.Find(thing) != self.struck.Size()) {{
                         continue;
                     }}
                     let distance = self.Distance3D(thing);
@@ -303,13 +303,18 @@ pub fn weapon(p: &str) -> String {
                 }}
             }}
 
+            // Only a living monster is ever struck: the bolt may have hit a door or a machine
+            static bool Strikable(Actor thing) {{
+                return thing != null && !thing.bDestroyed && thing.bIsMonster && thing.bShootable && thing.health > 0;
+            }}
+
             void Strike() {{
-                if (self.next == null || self.next.health <= 0) {{
+                if (!{p}_TeslaArc.Strikable(self.next) || self.struck.Find(self.next) != self.struck.Size()) {{
                     self.next = self.Nearest();
                 }}
                 let victim = self.next;
                 self.next = null;
-                if (victim == null || self.left <= 0) {{
+                if (!{p}_TeslaArc.Strikable(victim) || self.left <= 0) {{
                     if (self.kills >= 4 && self.target != null) {{
                         self.target.A_StartSound("waw/tesla_happy", CHAN_AUTO);
                     }}
@@ -330,8 +335,11 @@ pub fn weapon(p: &str) -> String {
                         FRandom[Doomify](-12, 12), FRandom[Doomify](-12, 12), FRandom[Doomify](8, victim.height),
                         FRandom[Doomify](-2, 2), FRandom[Doomify](-2, 2), FRandom[Doomify](0, 3), startalphaf: 1, fadestepf: 0.06);
                 }}
-                // the shooter is the source, so the kill and its points are theirs
-                victim.DamageMobj(self, self.target, max(victim.health, 1), 'Tesla', DMG_THRUSTLESS);
+                // the shooter is the source, so the kill and its points are theirs; checked again,
+                // as the sounds and sparks above may have run code on it
+                if ({p}_TeslaArc.Strikable(victim)) {{
+                    victim.DamageMobj(self, self.target, max(victim.health, 1), 'Tesla', DMG_THRUSTLESS);
+                }}
             }}
 
             States {{

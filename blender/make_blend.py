@@ -3,7 +3,7 @@
     blender -b --factory-startup --python blender/make_blend.py -- blender/weapon.blend
 
 The scene: a camera where the player's eye is (World at War's tag_view, the origin of every
-viewmodel), lit dark and brooding with coloured lights that make the weapons stand out, at 35
+viewmodel), lit dark and brooding with lights that make the weapons stand out in their own colours, at 35
 frames a second like Doom, and a compositor that gives every sprite a dark one-pixel border.
 
 Sizes: Doom draws weapon sprites on a 320x200 screen with pixels 1.2 times taller than wide (a 4:3
@@ -103,16 +103,17 @@ def lights(scene):
     # ahead, a little right and below the eye.
     gun = (0.45, -0.08, -0.12)
     # A warm key from above right keeps the textures' own colours; a cold cyan rim from behind
-    # cuts the silhouette out of the dark; a faint violet from below gives the shadows a hue.
+    # cuts the silhouette out of the dark; a faint cool fill from below keeps the shadows from
+    # going flat. No coloured tint over the weapon: the purple is only in the border.
     light(scene, "Key", "AREA", (0.15, -0.45, 0.4), gun, (1.0, 0.8, 0.6), 13.0, 0.3)
     light(scene, "Rim", "SPOT", (1.1, 0.35, 0.35), gun, (0.3, 0.9, 1.0), 12.0)
-    light(scene, "Under", "AREA", (0.3, 0.25, -0.55), gun, (0.55, 0.25, 1.0), 1.2, 0.4)
+    light(scene, "Under", "AREA", (0.3, 0.25, -0.55), gun, (0.75, 0.8, 0.9), 0.8, 0.4)
     light(scene, "Eye", "POINT", (-0.05, 0.0, 0.05), gun, (1.0, 0.9, 0.8), 0.6)
 
     world = bpy.data.worlds.new("Dark")
     world.use_nodes = True
     background = world.node_tree.nodes["Background"]
-    background.inputs["Color"].default_value = (0.012, 0.008, 0.022, 1)
+    background.inputs["Color"].default_value = (0.01, 0.01, 0.011, 1)
     background.inputs["Strength"].default_value = 1.0
     scene.world = world
 

@@ -37,6 +37,8 @@ pub const SOUND_ROLES: &[&str] = &[
     "first_raise",
     "drop",
     "rechamber",
+    // with the last shot: the M1 Garand's en-bloc clip pinging out
+    "eject",
     // projectiles and special weapons
     "projectile",
     "impact",
@@ -73,6 +75,8 @@ pub enum Kind {
     Mine,
     /// A knife: no ammo, swung.
     Melee,
+    /// A perk's bottle (the map's own machine sells it).
+    Drink,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -171,6 +175,19 @@ pub struct View {
     /// Horizontal field of view when aiming (4:3, degrees); the game's adsZoomFov.
     #[serde(default)]
     pub ads_fov: Option<f64>,
+    /// A bone of the hands to carry the model by (`j_wrist_ri`), for equipment whose clips
+    /// leave `tag_weapon` behind the eye (the cymbal monkey); it keeps where each clip starts.
+    #[serde(default)]
+    pub hold: Option<String>,
+    /// For some renders only, by render (`first_raise`): a bone to hang the model exactly on, as
+    /// the game hangs a gun; the Bowie knife is a gun on `tag_weapon` in its flourish, but in the
+    /// left hand when it slashes.
+    #[serde(default)]
+    pub hold_in: BTreeMap<String, String>,
+    /// Equipment World at War keeps off screen until it is used: the frame of its throw (or
+    /// swing) to hold it at while it is up; the frame showing most of it when unset.
+    #[serde(default)]
+    pub hold_frame: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -183,8 +200,12 @@ pub struct Weapon {
     /// Two letters or digits that start every sprite of the weapon; unique across weapons.
     pub sprite: String,
     pub kind: Kind,
-    /// The weapon slot it goes in (the box gives what is in the slots).
+    /// The weapon slot it goes in (the box gives what is in the slots); drinks have none.
+    #[serde(default)]
     pub slot: u8,
+    /// A drink's perk, as Horde Hammer names it: QuickRevive, Juggernog, SpeedCola or DoubleTap.
+    #[serde(default)]
+    pub perk: Option<String>,
     pub game: Game,
     /// The id of its Pack-a-Punched version.
     #[serde(default)]
@@ -242,7 +263,17 @@ impl Weapon {
             self.class
         );
         ensure!(!self.game.models.is_empty(), "game.models is empty");
-        ensure!((1..=9).contains(&self.slot), "slot must be 1 to 9");
+        if self.kind == Kind::Drink {
+            ensure!(
+                matches!(
+                    self.perk.as_deref(),
+                    Some("QuickRevive" | "Juggernog" | "SpeedCola" | "DoubleTap")
+                ),
+                "a drink needs perk = QuickRevive, Juggernog, SpeedCola or DoubleTap"
+            );
+        } else {
+            ensure!((1..=9).contains(&self.slot), "slot must be 1 to 9");
+        }
         ensure!(self.fire.time > 0.0, "fire.time must be positive");
         for role in self.animations.keys() {
             ensure!(
@@ -265,7 +296,7 @@ impl Weapon {
             );
         }
         match self.kind {
-            Kind::Melee => {}
+            Kind::Melee | Kind::Drink => {}
             Kind::Grenade | Kind::Monkey | Kind::Mine => ensure!(
                 self.animations.contains_key("fire"),
                 "animations.fire (the throw) is required"

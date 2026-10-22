@@ -25,3 +25,7 @@ drop = "viewmodel_bowie_slash"
 [sounds]
 melee = "bowie_swing"
 hit = "bowie_stab"
+
+[view]
+# its flourish holds it like a gun; slashes hold it in the left hand
+hold_in = { first_raise = "tag_weapon" }

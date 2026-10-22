@@ -1,0 +1,20 @@
+# Juggernog: Der Riese's zombie_perk_bottle_jugg, drunk as the game drinks it. The map's own machine
+# sells it (its drink is the class <prefix>_JuggernogDrink).
+name = "Juggernog"
+class = "Juggernog"
+sprite = "JN"
+kind = "drink"
+perk = "Juggernog"
+
+[game]
+weapon = "zombie_perk_bottle_jugg"
+models = ["viewmodel_hands", "zombie_perk_bottle_jugg"]
+world = "zombie_3rd_perk_bottle_jugg"
+
+[fire]
+time = 2
+
+[animations]
+idle = "viewmodel_zombie_perksacola_idle"
+raise = "viewmodel_zombie_perksacola_drink"
+drop = "viewmodel_zombie_perksacola_lower"

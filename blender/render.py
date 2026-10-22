@@ -226,6 +226,27 @@ def unlight(undo):
         obj.data.polygons[polygon].material_index = index
 
 
+def hold(rig, bone, exact):
+    """Carries the model (j_gun, or a knife's tag_origin) by `bone`: exactly on it, as the game
+    hangs a gun (the TOML's view.hold_in), or from where the current clip starts (view.hold)."""
+    gun = rig.pose.bones.get("j_gun") or rig.pose.bones.get("tag_origin")
+    for constraint in list(gun.constraints) if gun else []:
+        gun.constraints.remove(constraint)
+    if gun is None or not bone:
+        return
+    if exact:
+        constraint = gun.constraints.new("COPY_TRANSFORMS")
+        constraint.target = rig
+        constraint.subtarget = bone
+        return
+    constraint = gun.constraints.new("CHILD_OF")
+    constraint.target = rig
+    constraint.subtarget = bone
+    bpy.context.scene.frame_set(0)
+    bpy.context.view_layer.update()
+    constraint.inverse_matrix = (rig.matrix_world @ rig.pose.bones[bone].matrix).inverted()
+
+
 def render_views(weapon, scene, objects, rig, done):
     view = scene.camera
     hip_fov = view.get("hip_fov", 65.0)
@@ -259,6 +280,8 @@ def render_views(weapon, scene, objects, rig, done):
             fovs = (hip_fov, hip_fov)
         reset(rig)
         rig.animation_data.action = combined
+        exact = (weapon.get("hold_in") or {}).get(name.split("@")[0])
+        hold(rig, exact or weapon.get("hold"), exact is not None)
         camera = view.data
         if camera.animation_data:
             camera.animation_data_clear()

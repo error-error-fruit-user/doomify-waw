@@ -36,6 +36,8 @@ enum Tic {
     Reload,
     /// The player may act again.
     Recover,
+    /// Drinking: a tic, half as many with Speed Cola.
+    Sip,
 }
 
 impl Tic {
@@ -45,6 +47,7 @@ impl Tic {
             Self::Fire => "1 FireTic",
             Self::Reload => "1 ReloadTic",
             Self::Recover => "1 Recover",
+            Self::Sip => "1 Sip",
         }
     }
 }
@@ -115,11 +118,14 @@ impl Built<'_> {
         let mut frame = self.get(render).first().cloned().unwrap_or(Frame::Empty);
         if frame == Frame::Empty && render.starts_with("idle") {
             // the throw's frame that shows most of it: wound up, the thing in hand
-            frame = visible(self.get("fire"))
-                .iter()
-                .max_by_key(|f| f.area())
-                .cloned()
-                .unwrap_or(Frame::Empty);
+            frame = match self.weapon.view.hold_frame {
+                Some(index) => self.get("fire").get(index).cloned(),
+                None => visible(self.get("fire"))
+                    .iter()
+                    .max_by_key(|f| f.area())
+                    .cloned(),
+            }
+            .unwrap_or(Frame::Empty);
         }
         let (sprite, letter) = frame.state();
         format!("{sprite} {letter}")
@@ -201,7 +207,7 @@ fn shot(project: &Project, built: &Built, aimed: bool) -> String {
             project.class(built.id)
         ),
         Kind::Flame => format!("TNT1 A 0 ShootFlame(\"{}Shot\");", project.class(built.id)),
-        Kind::Grenade | Kind::Monkey | Kind::Mine | Kind::Melee => String::new(),
+        Kind::Grenade | Kind::Monkey | Kind::Mine | Kind::Melee | Kind::Drink => String::new(),
     }
 }
 
@@ -232,6 +238,11 @@ fn fire_state(
     code.always(format!("{label}:")).indented(|code| {
         code.always("TNT1 A 0 ResetClock;")
             .when_some(sound, |code, line| code.always(line))
+            .when_some(
+                last.then(|| built.sound_line("eject", "CHAN_AUTO"))
+                    .flatten(),
+                |code, line| code.always(line),
+            )
             .always(shot(project, built, aimed))
             .when(weapon.kind == Kind::Tesla, |code| {
                 code.always(r#"TNT1 A 0 A_SetBlend("7fd8ff", 0.3, 10);"#)
@@ -921,6 +932,77 @@ fn melee_file(project: &Project, built: &Built, header: String) -> String {
         .build()
 }
 
+/// A perk's bottle, drunk as World at War drinks it (Horde Hammer's perk and drink underneath;
+/// the map's own machines sell it by this class name). Quick Revive's has a solo drink too.
+fn drink_file(project: &Project, built: &Built, header: String) -> String {
+    let weapon = built.weapon;
+    let p = &project.config.prefix;
+    let perk = weapon.perk.as_deref().unwrap_or_default();
+    let class = project.class(built.id);
+    let drink = built.get("raise");
+    // The perk takes hold at the swallow, or three fifths of the way in
+    let swallow = built
+        .events("raise", drink.len())
+        .into_iter()
+        .find(|(_, lines)| {
+            lines
+                .iter()
+                .any(|l| l.contains("swallow") || l.contains("drink"))
+        })
+        .map(|(frame, _)| frame)
+        .unwrap_or(drink.len() * 3 / 5);
+    let mut events = built.events("raise", drink.len());
+    events
+        .entry(swallow)
+        .or_default()
+        .push("TNT1 A 0 Consume;".into());
+    let ready = Code::new().always("Ready:").indented(|code| {
+        code.when_some(built.sound_line("raise", "CHAN_WEAPON"), |c, l| c.always(l))
+            .append(frames(Code::new(), drink, Tic::Sip, &events))
+            .append(frames(
+                Code::new(),
+                built.get("drop"),
+                Tic::Sip,
+                &built.events("drop", built.get("drop").len()),
+            ))
+            .always("TNT1 A 0 Consume;")
+            .always("TNT1 A 0 A_StartSound(\"hh/bottle_break\", CHAN_AUTO);")
+            .always("Goto Deselect;")
+    });
+    let pickup = built.pickup.clone().unwrap_or(Frame::Empty).state();
+    let states = |code: Code| {
+        code.always("States {")
+            .always("Spawn:")
+            .indented(|c| {
+                c.always(format!("{} {} -1;", pickup.0, pickup.1))
+                    .always("Stop;")
+            })
+            .append(ready.clone())
+            .always("}")
+    };
+    let sip = formatdoc! {r#"
+        // A frame of drinking: it can still be thrown; Speed Cola drinks twice as fast
+        action void Sip() {{
+            A_WeaponReady(WRF_NOSWITCH | WRF_NOBOB);
+            A_SetTics(invoker.reloadFrameRate < invoker.Default.reloadFrameRate && (level.maptime & 1) != 0? 0: 1);
+        }}
+    "#};
+    let solo = perk == "QuickRevive";
+    Code::new()
+        .always(header)
+        .gap()
+        .block(format!("class {class}Drink : HH_{perk}Drink"), |code| {
+            code.always(sip.clone()).gap().append(states(Code::new()))
+        })
+        .when(solo, |code| {
+            code.gap().block(
+                format!("class {p}_SoloReviveDrink : HH_SoloReviveDrink"),
+                |code| code.always(sip.clone()).gap().append(states(Code::new())),
+            )
+        })
+        .build()
+}
+
 /// The chalk outline to buy it off the wall, if it has one.
 fn wall_drawing(project: &Project, built: &Built) -> Code {
     let weapon = built.weapon;
@@ -1077,6 +1159,9 @@ pub fn file(project: &Project, built: &Built) -> String {
     "#, name = weapon.name, source = weapon.game.weapon, id = built.id};
     if melee {
         return melee_file(project, built, header);
+    }
+    if weapon.kind == Kind::Drink {
+        return drink_file(project, built, header);
     }
     let defaults = Code::new()
         .always(format!("Tag \"{}\";", weapon.name))

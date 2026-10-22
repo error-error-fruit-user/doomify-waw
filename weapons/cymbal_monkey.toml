@@ -32,3 +32,8 @@ throw = "monkey_throw"
 first_raise = "monkey_raise_plr"
 raise = "monkey_raise_plr"
 bounce = "monkey_land_default"
+
+[view]
+# its clips leave tag_weapon behind the eye; in World at War it is in the right hand
+hold = "j_wrist_ri"
+hold_frame = 10

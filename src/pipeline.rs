@@ -74,6 +74,8 @@ pub fn build(project: &Project, options: &Options) -> Result<()> {
                     "frames": frames(&weapon_key(id)),
                     "force": options.force,
                     "ads_fov": weapon.view.ads_fov,
+                    "hold": weapon.view.hold,
+                    "hold_in": weapon.view.hold_in,
                     "stance": {"in": weapon.clip("ads_up"), "out": weapon.clip("ads_down")},
                     "glow": plan::glow(weapon),
                     "renders": plan::renders(weapon),
