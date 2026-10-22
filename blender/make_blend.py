@@ -40,7 +40,7 @@ def eevee(scene):
     scene.render.engine = "BLENDER_EEVEE_NEXT" if "BLENDER_EEVEE_NEXT" in engines else "BLENDER_EEVEE"
     settings = scene.eevee
     for name, value in (("use_gtao", True), ("use_bloom", True), ("bloom_intensity", 0.03),
-                        ("use_soft_shadows", True), ("taa_render_samples", 32)):
+                        ("use_soft_shadows", True), ("taa_render_samples", 8)):
         if hasattr(settings, name):
             setattr(settings, name, value)
 
