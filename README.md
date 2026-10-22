@@ -4,7 +4,7 @@
 
 Rebuilds the weapons and sounds of Call of Duty: World at War's **Der Riese** for UZDoom zombies maps, from **your own copy of the game, while it runs**. Nothing of World at War is in this repository or in the maps that use it: Nacht des Schreckens and Asylum ship a `doomify.py` that runs this once before you play.
 
-Every Der Riese weapon comes out ready to play on [Horde Hammer](https://github.com/error-error-fruit-user/horde-hammer): the M1911 to the Wunderwaffe DG-2, the BAR to the Ray Gun, the Pack-a-Punched version of each (Mustang & Sally, the Gibs-o-matic...), the Stielhandgranate, Bouncing Betty, cymbal monkey and Bowie knife, with their wall drawings, their sounds and the zombies' voices.
+Every Der Riese weapon comes out ready to play on [Horde Hammer](https://github.com/error-error-fruit-user/horde-hammer): the M1911 to the Wunderwaffe DG-2, the BAR to the Ray Gun, the Pack-a-Punched version of each (Mustang & Sally, the Gibs-o-matic...), the Stielhandgranate, Bouncing Betty, cymbal monkey and Bowie knife, with their wall drawings, their sounds and the zombies' voices, and the four perk bottles drunk as Der Riese drinks them (a map keeps its own machines).
 
 ## Using it
 
@@ -34,13 +34,16 @@ World at War layers its viewmodel animations: a clip (fire, reload) never moves 
 - **The Wunderwaffe DG-2** fires a bolt of lightning that kills a zombie and **jumps to the next one it can see**, up to 10 (24 for the DG-3 JZ), each one shaking, sparking and screaming, with a flash and a light at every jump; a big kill makes the gun pleased with itself. Its **three bulbs light up with the rounds left**: every pose is rendered with as many filaments glowing as there are rounds, and each shot puts one out.
 - **Equipment**: one key (G, "World at War" in the controls menu) brings up the best equipment you have, the cymbal monkey, then the Bouncing Betty, the Bowie knife, then grenades; pressed again, the next. Grenades bounce and go off, the Betty is planted and jumps when a zombie comes near, the monkey plays its cymbals and every zombie near goes to it before it goes off.
 - **The Bowie knife**, bought off the wall, plays its flourish, then **replaces the kick**: the kick key stabs with it.
+- **Perks**: Juggernog, Quick Revive, Speed Cola and Double Tap are drunk from Der Riese's bottles, hands and all (`kind = "drink"`, `perk = "Juggernog"`); the class is `<Prefix>_JuggernogDrink`, which the map's own machine sells. Speed Cola drinks twice as fast.
+- The M1 Garand's clip **pings** out on its last shot (the sound role `eject`).
 
 ## For a map
 
 `doomify-waw init path/to/map/doomify --prefix Nacht --output ../nacht-waw` writes a `doomify.toml` and the default weapons and sound sets, which the map then owns:
 
 - `doomify.toml`: the class prefix (`Nacht_Thompson`), the pk3 folder to write (replaced on every run; it holds a `DOOMIFY.txt` so nothing else is ever deleted), the damage scale (World at War's damage times this; Horde Hammer's zombies have less health), the map's own pk3 folders (so sprite names never clash) and the wall drawings' editor numbers.
-- `weapons/<id>.toml`: one per weapon, with World at War's own numbers, read from the running game (`hell-hound list --kind weapon --json`): what to pull, the slot, box weight, last stand rank, wall cost and chalk, ammo, fire time, damage, spread, the clip of every role (`idle`, `fire`, `reload`, `ads_up`...) and the sound of every role.
+- `weapons/<id>.toml`: one per weapon (or perk bottle), with World at War's own numbers, read from the running game (`hell-hound list --kind weapon --json`): what to pull, the slot, box weight, last stand rank, wall cost and chalk, ammo, fire time, damage, spread, the clip of every role (`idle`, `fire`, `reload`, `ads_up`...) and the sound of every role.
+- `[view]` in a weapon's TOML tunes how it is rendered: `ads_fov`; `hold = "j_wrist_ri"` carries the model by a bone of the hands where World at War's clip leaves it behind the eye (the monkey); `hold_in = { first_raise = "tag_weapon" }` hangs it exactly on a bone in one render (the Bowie's flourish); `hold_frame` picks the throw frame equipment is held at.
 - `sounds/<set>.toml`: Doom sound names and the aliases they come from (`zombie/normal` is `amb_vocals`).
 
 The generated pk3 folder is loaded **after** the map. The map's player starts with the weapons it wants (`Nacht_Colt`, `Nacht_Stielhandgranate`), and the weapons put themselves in slots. Classes: `<Prefix>_DoomifyWeapon` (the base), one per weapon with its `Ammo`, `Shot` and `Drawing`, `<Prefix>_DoomifyEquipment` (the equipment key). Sounds are `waw/<alias>`. Electrocuted zombies die by `Tesla` damage, burnt ones by `Fire`, blown up ones by `Explosive`: a map's zombie can have states for them.
