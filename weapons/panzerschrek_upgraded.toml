@@ -1,0 +1,53 @@
+# Longinus: Der Riese's panzerschrek_zombie_upgraded. Numbers are World at War's own,
+# read from the running game (hell-hound list --kind weapon --json); damage is scaled by the map.
+name = "Longinus"
+class = "Longinus"
+sprite = "P3"
+kind = "projectile"
+slot = 6
+upgraded = true
+
+[game]
+weapon = "panzerschrek_zombie_upgraded"
+models = ["viewmodel_hands", "viewmodel_zombie_panzerschreck_up"]
+world = "weapon_zombie_panzerschreck_up"
+
+[ammo]
+magazine = 3
+reserve = 27
+give = 37
+
+[fire]
+auto = false
+time = 0.33
+damage = 1000
+splash = 320
+speed = 36
+color = "ff5a2a"
+
+[animations]
+idle = "viewmodel_panzerschreck_idle"
+empty_idle = "viewmodel_panzerschreck_idle"
+fire = "viewmodel_panzerschreck_fire"
+last_fire = "viewmodel_panzerschreck_fire"
+ads_fire = "viewmodel_panzerschreck_fire"
+ads_last_fire = "viewmodel_panzerschreck_fire"
+reload = "viewmodel_panzerschreck_reload"
+raise = "viewmodel_panzerschreck_pullout"
+first_raise = "viewmodel_panzerschreck_pullout"
+drop = "viewmodel_panzerschreck_putaway"
+ads_up = "viewmodel_panzerschreck_ads_up"
+ads_down = "viewmodel_panzerschreck_ads_down"
+
+[sounds]
+fire = "weap_pnzr_fire_ubershot_st"
+last_fire = "weap_pnzr_fire_ubershot_st"
+dry = "dryfire_rifle_plr"
+raise = "weap_raise_plr"
+first_raise = "weap_raise_plr"
+drop = "weap_putaway_plr"
+projectile = "weap_pnzr_fire_rocket"
+impact = "grenade_explode"
+
+[view]
+ads_fov = 50

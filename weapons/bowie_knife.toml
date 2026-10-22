@@ -1,0 +1,27 @@
+# Bowie knife: Der Riese's zombie_bowie_flourish and the Bowie slash. Bought off the wall it plays
+# its flourish; from then on the kick key stabs with it, and the equipment key brings it up.
+name = "Bowie Knife"
+class = "BowieKnife"
+sprite = "BK"
+kind = "melee"
+slot = 9
+wall = { cost = 3000, chalk = "bowie_knife_chalk_c" }
+
+[game]
+weapon = "zombie_bowie_flourish"
+models = ["viewmodel_hands", "viewmodel_knife_bowie"]
+
+[fire]
+time = 0.5
+damage = 1000
+
+[animations]
+idle = "viewmodel_bowie_slash"
+fire = "viewmodel_bowie_slash"
+first_raise = "viewmodel_zombie_bowie"
+raise = "viewmodel_bowie_slash"
+drop = "viewmodel_bowie_slash"
+
+[sounds]
+melee = "bowie_swing"
+hit = "bowie_stab"

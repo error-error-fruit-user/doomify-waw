@@ -1,0 +1,7 @@
+target/
+__pycache__/
+published/
+secrets/
+output/
+/CLAUDE.md
+*.blend1

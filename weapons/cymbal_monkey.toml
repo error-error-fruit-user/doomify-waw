@@ -1,0 +1,34 @@
+# Cymbal monkey: Der Riese's zombie_cymbal_monkey, from the mystery box. Equipment: thrown, it
+# plays its cymbals and every zombie near comes to it until it goes off.
+name = "Cymbal Monkey"
+class = "CymbalMonkey"
+sprite = "CM"
+kind = "monkey"
+slot = 8
+box_weight = 1
+
+[game]
+weapon = "zombie_cymbal_monkey"
+models = ["viewmodel_hands", "viewmodel_zombie_cymbal_monkey"]
+world = "weapon_zombie_monkey_bomb"
+
+[ammo]
+magazine = 3
+give = 3
+
+[fire]
+time = 0.7
+damage = 1000
+splash = 260
+
+[animations]
+idle = "viewmodel_zombie_monkeybomb_idle"
+fire = "viewmodel_zombie_monkeybomb_throw"
+raise = "viewmodel_zombie_monkeybomb_idle"
+drop = "viewmodel_zombie_monkeybomb_idle"
+
+[sounds]
+throw = "monkey_throw"
+first_raise = "monkey_raise_plr"
+raise = "monkey_raise_plr"
+bounce = "monkey_land_default"

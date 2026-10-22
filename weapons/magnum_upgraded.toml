@@ -1,0 +1,52 @@
+# .357 Plus 1 K1L-u: Der Riese's zombie_sw_357_upgraded. Numbers are World at War's own,
+# read from the running game (hell-hound list --kind weapon --json); damage is scaled by the map.
+name = ".357 Plus 1 K1L-u"
+class = "MagnumUpgraded"
+sprite = "S1"
+kind = "bullet"
+slot = 1
+upgraded = true
+last_stand = 4
+
+[game]
+weapon = "zombie_sw_357_upgraded"
+models = ["viewmodel_hands", "viewmodel_zombie_357magnum_up"]
+world = "weapon_mp_357magnum"
+
+[ammo]
+magazine = 6
+reserve = 74
+give = 74
+
+[fire]
+auto = false
+time = 0.32
+damage = 1000
+spread = 1.5
+ads_spread = 0.2
+
+[animations]
+idle = "viewmodel_sw357_idle"
+empty_idle = "viewmodel_sw357_idle"
+fire = "viewmodel_sw357_fire"
+last_fire = "viewmodel_sw357_fire"
+ads_fire = "viewmodel_sw357_ads_fire"
+ads_last_fire = "viewmodel_sw357_ads_fire"
+reload = "viewmodel_sw357_reload"
+reload_empty = "viewmodel_sw357_reload"
+raise = "viewmodel_sw357_pullout"
+first_raise = "viewmodel_sw357_pullout"
+drop = "viewmodel_sw357_putaway"
+ads_up = "viewmodel_sw357_ads_up"
+ads_down = "viewmodel_sw357_ads_down"
+
+[sounds]
+fire = "weap_357_fire_ubershot_st"
+last_fire = "weap_357_fire_ubershot_st"
+dry = "dryfire_pistol_plr"
+raise = "weap_raise_plr"
+first_raise = "weap_raise_plr"
+drop = "weap_putaway_plr"
+
+[view]
+ads_fov = 55

@@ -1,0 +1,51 @@
+# Widdershins RC-1: Der Riese's zombie_m1carbine_upgraded. Numbers are World at War's own,
+# read from the running game (hell-hound list --kind weapon --json); damage is scaled by the map.
+name = "Widdershins RC-1"
+class = "Widdershins"
+sprite = "C2"
+kind = "bullet"
+slot = 2
+upgraded = true
+
+[game]
+weapon = "zombie_m1carbine_upgraded"
+models = ["viewmodel_hands", "viewmodel_zombie_m1carbine_rifle_up"]
+world = "weapon_zombie_m1carbine_rifle_up"
+
+[ammo]
+magazine = 15
+reserve = 135
+give = 135
+
+[fire]
+auto = true
+time = 0.1
+damage = 200
+spread = 2.0
+ads_spread = 0.3
+
+[animations]
+idle = "viewmodel_carbine_idle"
+empty_idle = "viewmodel_carbine_empty_idle"
+fire = "viewmodel_carbine_fire"
+last_fire = "viewmodel_carbine_lastshot"
+ads_fire = "viewmodel_carbine_ads_fire"
+ads_last_fire = "viewmodel_carbine_lastshot"
+reload = "viewmodel_carbine_reload"
+reload_empty = "viewmodel_carbine_reload_empty"
+raise = "viewmodel_carbine_pullout"
+first_raise = "viewmodel_carbine_first_raise"
+drop = "viewmodel_carbine_putaway"
+ads_up = "viewmodel_carbine_ads_up"
+ads_down = "viewmodel_carbine_ads_down"
+
+[sounds]
+fire = "weap_carbine_fire_ubershot_st"
+last_fire = "weap_carbine_fire_ubershot_st"
+dry = "dryfire_rifle_plr"
+raise = "weap_raise_plr"
+first_raise = "carbine_first_raise"
+drop = "weap_putaway_plr"
+
+[view]
+ads_fov = 50

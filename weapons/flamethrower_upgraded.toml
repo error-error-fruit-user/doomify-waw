@@ -1,0 +1,45 @@
+# FIW Nitrogen cooled: Der Riese's m2_flamethrower_zombie_upgraded. Numbers are World at War's own,
+# read from the running game (hell-hound list --kind weapon --json); damage is scaled by the map.
+name = "FIW Nitrogen cooled"
+class = "NitrogenFlamethrower"
+sprite = "F2"
+kind = "flame"
+slot = 6
+upgraded = true
+
+[game]
+weapon = "m2_flamethrower_zombie_upgraded"
+models = ["viewmodel_hands", "viewmodel_zombie_flamethrower_up"]
+world = "weapon_zombie_flamethrower_up"
+
+[ammo]
+magazine = 100
+reserve = 200
+give = 0
+
+[fire]
+auto = true
+time = 0.2
+damage = 45
+color = "7fe0ff"
+
+[animations]
+idle = "viewmodel_flamethrower_idle"
+fire = "viewmodel_flamethrower_fire"
+last_fire = "viewmodel_flamethrower_lastfire"
+ads_fire = "viewmodel_flamethrower_fire"
+ads_last_fire = "viewmodel_flamethrower_idle"
+raise = "viewmodel_flamethrower_pullout"
+first_raise = "viewmodel_flamethrower_first_pullout"
+drop = "viewmodel_flamethrower_putaway"
+ads_up = "viewmodel_flamethrower_ads_up"
+ads_down = "viewmodel_flamethrower_ads_down"
+
+[sounds]
+dry = "player_out_of_ammo"
+raise = "weap_raise_plr"
+first_raise = "weap_flamethrower_foley_F"
+drop = "weap_putaway_plr"
+
+[view]
+ads_fov = 60

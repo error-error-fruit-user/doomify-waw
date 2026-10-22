@@ -1,0 +1,54 @@
+# Porter's X2 Ray Gun: Der Riese's ray_gun_upgraded. Numbers are World at War's own,
+# read from the running game (hell-hound list --kind weapon --json); damage is scaled by the map.
+name = "Porter's X2 Ray Gun"
+class = "PortersRayGun"
+sprite = "R2"
+kind = "projectile"
+slot = 7
+upgraded = true
+last_stand = 6
+
+[game]
+weapon = "ray_gun_upgraded"
+models = ["viewmodel_hands", "viewmodel_zombie_raygun_up"]
+world = "weapon_usa_ray_gun"
+
+[ammo]
+magazine = 40
+reserve = 160
+give = 160
+
+[fire]
+auto = false
+time = 0.33
+damage = 1000
+splash = 80
+speed = 46
+color = "ff3a3a"
+
+[animations]
+idle = "viewmodel_ray_gun_idle"
+empty_idle = "viewmodel_ray_gun_idle"
+fire = "viewmodel_ray_gun_fire"
+last_fire = "viewmodel_ray_gun_fire"
+ads_fire = "viewmodel_ray_gun_fire"
+ads_last_fire = "viewmodel_ray_gun_fire"
+reload = "viewmodel_ray_gun_reload"
+raise = "viewmodel_ray_gun_raise"
+first_raise = "viewmodel_ray_gun_raise"
+drop = "viewmodel_ray_gun_drop"
+ads_up = "viewmodel_ray_gun_ads_up"
+ads_down = "viewmodel_ray_gun_ads_down"
+
+[sounds]
+fire = "weap_rgun_fire_ubershot_st"
+last_fire = "weap_rgun_fire_ubershot_st"
+dry = "dryfire_pistol_plr"
+raise = "weap_raise_plr"
+first_raise = "weap_raise_plr"
+drop = "weap_putaway_plr"
+projectile = "weap_rgun_loop"
+impact = "weap_rgun_exp"
+
+[view]
+ads_fov = 55

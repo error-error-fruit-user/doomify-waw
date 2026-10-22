@@ -1,0 +1,52 @@
+# PTRS-41: Der Riese's ptrs41_zombie. Numbers are World at War's own,
+# read from the running game (hell-hound list --kind weapon --json); damage is scaled by the map.
+name = "PTRS-41"
+class = "Ptrs41"
+sprite = "PT"
+kind = "bullet"
+slot = 2
+upgrade = "ptrs41_upgraded"
+box_weight = 1
+wall = { cost = 1500, chalk = "ptrs_chalk_c" }
+
+[game]
+weapon = "ptrs41_zombie"
+models = ["viewmodel_hands", "viewmodel_zombie_ptrs41"]
+world = "weapon_zombie_ptrs41"
+
+[ammo]
+magazine = 5
+reserve = 55
+give = 25
+
+[fire]
+auto = false
+time = 0.8
+damage = 1000
+spread = 1.0
+ads_spread = 0.0
+
+[animations]
+idle = "viewmodel_ptrs_idle"
+empty_idle = "viewmodel_ptrs_idle_empty"
+fire = "viewmodel_ptrs_fire"
+last_fire = "viewmodel_ptrs_last_shot"
+ads_fire = "viewmodel_ptrs_ads_fire"
+ads_last_fire = "viewmodel_ptrs_ads_last_shot"
+reload = "viewmodel_ptrs_reload"
+reload_empty = "viewmodel_ptrs_reload_empty"
+raise = "viewmodel_ptrs_pullout"
+first_raise = "viewmodel_ptrs_pullout"
+drop = "viewmodel_ptrs_putaway"
+ads_up = "viewmodel_ptrs_ads_up"
+ads_down = "viewmodel_ptrs_ads_down"
+
+[sounds]
+fire = "weap_ptrs_fire_plr"
+dry = "dryfire_rifle_plr"
+raise = "weap_raise_plr"
+first_raise = "weap_raise_plr"
+drop = "weap_putaway_plr"
+
+[view]
+ads_fov = 30

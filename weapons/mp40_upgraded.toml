@@ -1,0 +1,51 @@
+# The Afterburner: Der Riese's zombie_mp40_upgraded. Numbers are World at War's own,
+# read from the running game (hell-hound list --kind weapon --json); damage is scaled by the map.
+name = "The Afterburner"
+class = "Afterburner"
+sprite = "M1"
+kind = "bullet"
+slot = 3
+upgraded = true
+
+[game]
+weapon = "zombie_mp40_upgraded"
+models = ["viewmodel_hands", "viewmodel_zombie_mp40_smg_up"]
+world = "weapon_zombie_mp40_smg_up"
+
+[ammo]
+magazine = 64
+reserve = 128
+give = 128
+
+[fire]
+auto = true
+time = 0.1
+damage = 200
+spread = 3.0
+ads_spread = 1.0
+
+[animations]
+idle = "viewmodel_mp40_idle"
+empty_idle = "viewmodel_mp40_idle_empty"
+fire = "viewmodel_mp40_fire"
+last_fire = "viewmodel_mp40_lastshot"
+ads_fire = "viewmodel_mp40_fire"
+ads_last_fire = "viewmodel_mp40_idle"
+reload = "viewmodel_mp40_reload"
+reload_empty = "viewmodel_mp40_reload_empty"
+raise = "viewmodel_mp40_pullout"
+first_raise = "viewmodel_mp40_first_raise"
+drop = "viewmodel_mp40_putaway"
+ads_up = "viewmodel_mp40_ads_up_pc"
+ads_down = "viewmodel_mp40_ads_down_pc"
+
+[sounds]
+fire = "weap_mp40_fire_ubershot_st"
+last_fire = "weap_mp40_fire_ubershot_st"
+dry = "dryfire_smg_plr"
+raise = "weap_raise_plr"
+first_raise = "weap_raise_plr"
+drop = "weap_putaway_plr"
+
+[view]
+ads_fov = 55

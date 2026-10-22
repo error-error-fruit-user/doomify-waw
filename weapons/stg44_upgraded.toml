@@ -1,0 +1,50 @@
+# Spatz-447 +: Der Riese's zombie_stg44_upgraded. Numbers are World at War's own,
+# read from the running game (hell-hound list --kind weapon --json); damage is scaled by the map.
+name = "Spatz-447 +"
+class = "Spatz447"
+sprite = "S2"
+kind = "bullet"
+slot = 3
+upgraded = true
+
+[game]
+weapon = "zombie_stg44_upgraded"
+models = ["viewmodel_hands", "viewmodel_zombie_mp44_lmg_up"]
+world = "weapon_zombie_mp44_lmg_up"
+
+[ammo]
+magazine = 60
+reserve = 240
+give = 240
+
+[fire]
+auto = true
+time = 0.08
+damage = 150
+spread = 3.0
+ads_spread = 0.8
+
+[animations]
+idle = "viewmodel_mp44_idle"
+empty_idle = "viewmodel_mp44_empty_idle"
+fire = "viewmodel_mp44_fire"
+last_fire = "viewmodel_mp44_last_shot"
+ads_fire = "viewmodel_mp44_fire_ads"
+reload = "viewmodel_mp44_reload"
+reload_empty = "viewmodel_mp44_reload_empty"
+raise = "viewmodel_mp44_pullout"
+first_raise = "viewmodel_mp44_first_raise"
+drop = "viewmodel_mp44_putaway"
+ads_up = "viewmodel_mp44_ads_up"
+ads_down = "viewmodel_mp44_ads_down"
+
+[sounds]
+fire = "weap_mp44_fire_ubershot_st"
+last_fire = "weap_mp44_fire_ubershot_st"
+dry = "dryfire_rifle_plr"
+raise = "weap_raise_plr"
+first_raise = "stg44_first_raise"
+drop = "weap_putaway_plr"
+
+[view]
+ads_fov = 55

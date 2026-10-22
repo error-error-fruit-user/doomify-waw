@@ -1,0 +1,57 @@
+# Wunderwaffe DG-3 JZ: Der Riese's tesla_gun_upgraded. Numbers are World at War's own,
+# read from the running game (hell-hound list --kind weapon --json); damage is scaled by the map.
+name = "Wunderwaffe DG-3 JZ"
+class = "WunderwaffeDG3"
+sprite = "W1"
+kind = "tesla"
+slot = 7
+upgraded = true
+
+[game]
+weapon = "tesla_gun_upgraded"
+models = ["viewmodel_hands", "viewmodel_zombie_tesla_up"]
+world = "weapon_usa_tesla"
+
+[ammo]
+magazine = 6
+reserve = 24
+give = 24
+
+[fire]
+auto = false
+time = 1
+damage = 1
+speed = 60
+arcs = 24
+arc_range = 360
+color = "ff7fd0"
+
+[animations]
+idle = "viewmodel_tesla_idle"
+empty_idle = "viewmodel_tesla_idle"
+fire = "viewmodel_tesla_fire"
+last_fire = "viewmodel_tesla_fire"
+ads_fire = "viewmodel_tesla_ads_fire"
+ads_last_fire = "viewmodel_tesla_ads_fire"
+reload = "viewmodel_tesla_reload"
+raise = "viewmodel_tesla_pullout"
+first_raise = "viewmodel_tesla_first_raise"
+drop = "viewmodel_tesla_putaway"
+ads_up = "viewmodel_tesla_ads_up"
+ads_down = "viewmodel_tesla_ads_down"
+
+[sounds]
+fire = "weap_tesla_fire_ubershot_st"
+last_fire = "weap_tesla_firelast_ubershot_st"
+dry = "dryfire_rifle_plr"
+raise = "tesla_foley"
+first_raise = "weap_raise"
+drop = "tesla_foley"
+projectile = "wpn_tesla_proj_loop"
+impact = "wpn_tesla_proj_impact"
+bounce = "tesla_bounce"
+happy = "tesla_happy"
+hum = "tesla_idle"
+
+[view]
+ads_fov = 55

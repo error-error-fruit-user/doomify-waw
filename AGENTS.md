@@ -1,0 +1,9 @@
+# Doomify WaW context
+
+- Rust (edition 2024) CLI, 0BSD, built against `../hell-hound` (path dependency until Hell Hound is published). It rebuilds World at War's Der Riese weapons and sounds for UZDoom maps on Horde Hammer from the player's own running game; README explains the pipeline (pull → Blender render → putpng sprites → generated ZScript/SNDINFO/MAPINFO/KEYCONF).
+- `src/code.rs` is the builder every generator uses: `always`, `when`, `otherwise_when`, `otherwise`, `when_some`, `each`, `block`; text is `indoc::formatdoc!`. Keep generators in that style (owner's request). Generated ZScript follows Horde Hammer's conventions: engine capitalization, explicit `self.`, named RNGs (`[Doomify]`), the multiplayer rules in `../horde-hammer/CLAUDE.md`.
+- `blender/make_blend.py` builds `blender/weapon.blend` (camera at tag_view, 480x224 canvas with 1.2 pixel aspect, 35 fps, dark lighting, compositor border); `blender/render.py` pulls with `doomify-waw --script` and renders. Both are embedded in the executable and part of the render cache key.
+- Weapon TOMLs (`weapons/`) carry World at War's own numbers; `doomify-waw init` copies them into a map, which then owns them. Sprite codes are two characters, unique; `TN` and `HH` are taken.
+- Viewmodel clips are layered: only ADS clips move `tag_torso`; hip pose = where ADS_down ends. Equipment (grenade, Betty, monkey) is off screen in World at War's idle; the generator holds it at the first visible throw frame.
+- Checks: `cargo test`, `cargo clippy --all-targets -- -D warnings`, and `secrets/check.sh PROJECT [--only ...]` (local) compiles a build with Horde Hammer's `secrets/check.sh`. Real-game work needs World at War running Der Riese; never write game memory.
+- `secrets/`, `output/`, `target/` and `/CLAUDE.md` stay local. Commit with `secrets/commit.sh "msg" --claude`; don't push without the owner. Plans: `secrets/TODO.md`, `../TODO.md`.

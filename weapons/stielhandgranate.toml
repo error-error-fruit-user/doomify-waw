@@ -1,0 +1,33 @@
+# Stielhandgranate: Der Riese's stick grenade (stielhandgranate). Equipment: the equipment key
+# brings it up, and players start with two. Its blast is World at War's frag grenade's.
+name = "Stielhandgranate"
+class = "Stielhandgranate"
+sprite = "SG"
+kind = "grenade"
+slot = 8
+wall = { cost = 250, chalk = "grenade_bag_chalk_c" }
+
+[game]
+weapon = "stielhandgranate"
+models = ["viewmodel_hands", "viewmodel_ger_nebelhandgrenate"]
+world = "weapon_ger_nebelhandgrenate"
+
+[ammo]
+magazine = 4
+give = 2
+
+[fire]
+time = 0.4
+damage = 300
+splash = 220
+
+[animations]
+idle = "viewmodel_germangrenade_idle"
+fire = "viewmodel_germangrenade_throw"
+raise = "viewmodel_germangrenade_idle"
+drop = "viewmodel_germangrenade_idle"
+
+[sounds]
+throw = "foley_throw"
+raise = "weap_raise_plr"
+bounce = "grenade_bounce_default"

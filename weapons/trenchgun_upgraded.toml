@@ -1,0 +1,58 @@
+# Gut Shot: Der Riese's zombie_shotgun_upgraded. Numbers are World at War's own,
+# read from the running game (hell-hound list --kind weapon --json); damage is scaled by the map.
+name = "Gut Shot"
+class = "GutShot"
+sprite = "T3"
+kind = "spread"
+slot = 4
+upgraded = true
+
+[game]
+weapon = "zombie_shotgun_upgraded"
+models = ["viewmodel_hands", "viewmodel_zombie_trenchgun_rifle_up"]
+world = "weapon_zombie_trenchgun_rifle_up"
+
+[ammo]
+magazine = 10
+reserve = 50
+give = 50
+segmented = true
+
+[fire]
+auto = false
+time = 0.283
+damage = 300
+pellets = 8
+spread = 6.0
+ads_spread = 4.0
+
+[animations]
+idle = "viewmodel_trenchgun_idle"
+empty_idle = "viewmodel_trenchgun_idle"
+fire = "viewmodel_trenchgun_fire"
+last_fire = "viewmodel_trenchgun_fire"
+ads_fire = "viewmodel_trenchgun_fire_ads"
+ads_last_fire = "viewmodel_trenchgun_fire"
+rechamber = "viewmodel_trenchgun_rechamber"
+ads_rechamber = "viewmodel_trenchgun_rechamber"
+reload = "viewmodel_trenchgun_reload_loop"
+reload_empty = "viewmodel_trenchgun_reload_loop"
+reload_start = "viewmodel_trenchgun_reload_start"
+reload_end = "viewmodel_trenchgun_reload_end"
+raise = "viewmodel_trenchgun_pullout"
+first_raise = "viewmodel_trenchgun_pullout"
+drop = "viewmodel_trenchgun_putaway"
+ads_up = "viewmodel_trenchgun_ads_up"
+ads_down = "viewmodel_trenchgun_ads_down"
+
+[sounds]
+fire = "weap_shotgun_fire_ubershot_st"
+last_fire = "weap_shotgun_fire_ubershot_st"
+dry = "dryfire_rifle_plr"
+raise = "weap_raise_plr"
+first_raise = "weap_raise_plr"
+drop = "weap_putaway_plr"
+rechamber = "gr_shotgun_rechamber"
+
+[view]
+ads_fov = 60

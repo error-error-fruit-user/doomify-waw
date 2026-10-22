@@ -1,0 +1,15 @@
+# What the weapons' shared ZScript plays besides each weapon's own sounds (waw/<alias>): the
+# Wunderwaffe's lightning, the monkey's cymbals, the Betty, explosions and the Bowie knife.
+name = "Weapon effects"
+
+[sounds]
+"doomify/tesla_bounce" = { alias = "tesla_bounce", note = "the lightning jumping to a zombie" }
+"doomify/tesla_happy" = { alias = "tesla_happy", note = "the Wunderwaffe pleased with a big kill" }
+"doomify/tesla_hum" = { alias = "tesla_idle", note = "the Wunderwaffe humming in hand" }
+"doomify/elec" = { alias = "elec_vocals", note = "a zombie being electrocuted" }
+"doomify/cymbals" = { alias = "monk_cymb_m", note = "the cymbal monkey playing" }
+"doomify/monkey_scream" = { alias = "monkey_scream_vox", note = "the monkey going off" }
+"doomify/betty_plant" = { alias = "bbetty_plant_default", note = "a Betty planted" }
+"doomify/explode" = { alias = "grenade_explode", note = "grenades, Betties and monkeys going off" }
+"doomify/melee_hit" = { alias = "melee_hit", note = "a knife landing" }
+"doomify/bowie_stab" = { alias = "bowie_stab", note = "the Bowie knife landing" }

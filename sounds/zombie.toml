@@ -1,0 +1,22 @@
+# Der Riese's zombies. The names are the ones nacht's zombies already use (zombie/normal...), plus
+# the World at War noises they didn't have. An alias with variants becomes a $random of them.
+name = "Der Riese's zombies"
+
+[sounds]
+"zombie/normal" = { alias = "amb_vocals", note = "shambling about" }
+"zombie/sprint" = { alias = "sprint_vocals", note = "running" }
+"zombie/attack" = { alias = "attack_vocals", note = "swinging at a player" }
+"zombie/inj" = { alias = "death_vocals", note = "hurt (World at War's zombies only grunt when they die)" }
+"zombie/shot" = { alias = "bullet_ap_flesh", note = "a bullet in the body" }
+"zombie/crack" = { alias = "bullet_impact_headshot", note = "a bullet in the head" }
+"zombie/fall" = { alias = "zombie_fall", note = "the body hitting the floor" }
+"zombie/death" = { alias = "death_vocals", note = "dying" }
+"zombie/behind" = { alias = "behind_vocals", note = "close behind a player" }
+"zombie/crawl" = { alias = "crawl_vocals", note = "crawling, legs gone" }
+"zombie/taunt" = { alias = "taunt_vocals", note = "taunting through a window" }
+"zombie/elec" = { alias = "elec_vocals", note = "electrocuted (the Wunderwaffe, electric traps)" }
+"zombie/gib" = { alias = "death_gibs", note = "blown apart" }
+"zombie/headpop" = { alias = "zombie_head_gib", note = "the head coming off" }
+"zombie/whoosh" = { alias = "attack_whoosh", note = "an arm swinging" }
+"zombie/spawn" = { alias = "zombie_spawn", note = "climbing out of the ground" }
+"zombie/burn" = { alias = "body_burn_novo", note = "set alight (the flamethrower)" }

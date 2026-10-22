@@ -1,0 +1,27 @@
+[package]
+name = "doomify-waw"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+build = "build.rs"
+description = "Rebuilds World at War's Der Riese weapons and sounds for UZDoom maps from the player's own running game"
+license = "0BSD"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4.5", features = ["derive"] }
+glob = "0.3"
+# The hell-hound checkout next to this one (a git dependency once it is published)
+hell-hound = { path = "../hell-hound" }
+image = { version = "0.25", default-features = false, features = ["png"] }
+indoc = "2"
+putpng = "1.0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
+toml = "0.8"
+zip = { version = "2.4", default-features = false, features = ["deflate"] }
+
+[profile.release]
+lto = true
+strip = true

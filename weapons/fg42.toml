@@ -1,0 +1,51 @@
+# FG42: Der Riese's zombie_fg42. Numbers are World at War's own,
+# read from the running game (hell-hound list --kind weapon --json); damage is scaled by the map.
+name = "FG42"
+class = "Fg42"
+sprite = "FG"
+kind = "bullet"
+slot = 5
+upgrade = "fg42_upgraded"
+box_weight = 1
+wall = { cost = 1500, chalk = "fg42_chalk_c" }
+
+[game]
+weapon = "zombie_fg42"
+models = ["viewmodel_hands", "viewmodel_zombie_fg42_lmg"]
+world = "weapon_zombie_fg42_lmg"
+
+[ammo]
+magazine = 32
+reserve = 160
+give = 160
+
+[fire]
+auto = true
+time = 0.064
+damage = 100
+spread = 3.5
+ads_spread = 1.0
+
+[animations]
+idle = "viewmodel_fg42_idle"
+empty_idle = "viewmodel_fg42_idle"
+fire = "viewmodel_fg42_fire"
+ads_fire = "viewmodel_fg42_ads_fire"
+reload = "viewmodel_fg42_partial_reload"
+reload_empty = "viewmodel_fg42_reload"
+raise = "viewmodel_fg42_pullout"
+first_raise = "viewmodel_fg42_pullout"
+drop = "viewmodel_fg42_putaway"
+ads_up = "viewmodel_fg42_ads_up"
+ads_down = "viewmodel_fg42_ads_down"
+
+[sounds]
+fire = "weap_fg42_fire_plr"
+last_fire = "weap_fg42_fire_plr"
+dry = "dryfire_rifle_plr"
+raise = "weap_raise_plr"
+first_raise = "weap_raise_plr"
+drop = "weap_putaway_plr"
+
+[view]
+ads_fov = 55
