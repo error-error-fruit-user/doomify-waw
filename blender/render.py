@@ -116,6 +116,27 @@ def import_glb(path, collection):
     return [o for o in collection.objects]
 
 
+def see_through(objects):
+    """Glass (a perk bottle's outside, the Wunderwaffe's tubes) lets what is inside show, as
+    its texture's alpha says; the importer makes every material opaque."""
+    for obj in objects:
+        for slot in getattr(obj, "material_slots", []):
+            material = slot.material
+            name = material.name.lower() if material else ""
+            if material is None or not material.use_nodes or not ("glass" in name or name.endswith("_out")):
+                continue
+            nodes, links = material.node_tree.nodes, material.node_tree.links
+            shader = next((n for n in nodes if n.type == "BSDF_PRINCIPLED"), None)
+            image = next((n for n in nodes if n.type == "TEX_IMAGE"), None)
+            if shader is None or image is None:
+                continue
+            links.new(image.outputs["Alpha"], shader.inputs["Alpha"])
+            # blended, not hashed: at a few samples hashing is noise
+            material.blend_method = "BLEND"
+            if hasattr(material, "show_transparent_back"):
+                material.show_transparent_back = False
+
+
 def armature(objects):
     rigs = [o for o in objects if o.type == "ARMATURE"]
     if len(rigs) != 1:
@@ -343,6 +364,7 @@ def render_weapon(weapon, blend):
     scene = bpy.context.scene
     collection = bpy.data.collections["Weapon"]
     objects = import_glb(os.path.join(weapon["pull"], "view.glb"), collection)
+    see_through(objects)
     rig = armature(objects)
     done = {}
     render_views(weapon, scene, objects, rig, done)
