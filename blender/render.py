@@ -116,6 +116,9 @@ def import_glb(path, collection):
     return [o for o in collection.objects]
 
 
+GLASS_LEAST = 0.52  # glass's least opacity, just over the sprite's hard edge
+
+
 def see_through(objects):
     """Glass (a perk bottle's outside, the Wunderwaffe's tubes) lets what is inside show, as
     its texture's alpha says; the importer makes every material opaque."""
@@ -130,7 +133,13 @@ def see_through(objects):
             image = next((n for n in nodes if n.type == "TEX_IMAGE"), None)
             if shader is None or image is None:
                 continue
-            links.new(image.outputs["Alpha"], shader.inputs["Alpha"])
+            # never so clear that the sprite's hard edge (alpha 0.5) cuts it away: a bottle's glass
+            # with nothing behind it would be a hole
+            floor = nodes.new("ShaderNodeMath")
+            floor.operation = "MAXIMUM"
+            floor.inputs[1].default_value = GLASS_LEAST
+            links.new(image.outputs["Alpha"], floor.inputs[0])
+            links.new(floor.outputs["Value"], shader.inputs["Alpha"])
             # blended, not hashed: at a few samples hashing is noise
             material.blend_method = "BLEND"
             if hasattr(material, "show_transparent_back"):
