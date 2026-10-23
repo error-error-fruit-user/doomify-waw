@@ -31,6 +31,7 @@ pub fn weapon(p: &str) -> String {
             property CooldownSound: cooldownSound;
 
             const JOLT_TICS = 24;
+            const JOLT_RANGE = 160;     // how far the reload's jolt reaches
             const REFILL_DELAY = 12;    // tics after the last flame before the tank refills
             const BURN_CHANNEL = CHAN_7;
 
@@ -136,10 +137,34 @@ pub fn weapon(p: &str) -> String {
 
             // The flamethrower's sound and tank: it roars while flames come out, and refills a
             // round a tic once it has been quiet a moment
-            // Its switch thrown, the Wunderwaffe comes back to life with a jolt
+            // Its switch thrown, the Wunderwaffe comes back to life with a jolt that electrocutes
+            // every zombie the player can see close by: the kills, and their points, are the player's
             action void Jolt() {{
                 invoker.joltTics = JOLT_TICS;
                 A_SetBlend("7fd8ff", 0.25, 10);
+                A_StartSound("waw/tesla_bounce", CHAN_AUTO);
+                Array<Actor> victims;
+                let things = BlockThingsIterator.Create(self, JOLT_RANGE);
+                while (things.Next()) {{
+                    let thing = things.thing;
+                    if ({p}_TeslaArc.Strikable(thing) && self.Distance3D(thing) <= JOLT_RANGE && self.CheckSight(thing, SF_IGNOREVISIBILITY)) {{
+                        victims.Push(thing);
+                    }}
+                }}
+                foreach (victim : victims) {{
+                    if (!{p}_TeslaArc.Strikable(victim)) {{
+                        continue;
+                    }}
+                    victim.A_StartSound("waw/elec_vocals", CHAN_VOICE);
+                    for (let i = 0; i < 12; ++i) {{
+                        victim.A_SpawnParticle("7fd8ff", SPF_FULLBRIGHT, 16, 4, 0,
+                            FRandom[Doomify](-12, 12), FRandom[Doomify](-12, 12), FRandom[Doomify](8, victim.height),
+                            FRandom[Doomify](-2, 2), FRandom[Doomify](-2, 2), FRandom[Doomify](0, 3), startalphaf: 1, fadestepf: 0.06);
+                    }}
+                    if ({p}_TeslaArc.Strikable(victim)) {{
+                        victim.DamageMobj(invoker, self, max(victim.health, 1), 'Tesla', DMG_THRUSTLESS);
+                    }}
+                }}
             }}
 
             // The hands shaking with the jolt, less and less, then still again
@@ -643,7 +668,7 @@ pub fn shock(p: &str) -> String {
     "#}
 }
 
-/// The shock: jagged bolts of light from the gun to the edges of the screen, flickering, drawn at
+/// The shock: jagged lightning crawling all around the gun in hand, flickering, drawn at
 /// Doom's pixel size so they look like the rest of the game, and a cold tint over everything.
 pub fn shock_gldefs(p: &str) -> String {
     formatdoc! {r#"
@@ -658,8 +683,9 @@ pub fn shock_gldefs(p: &str) -> String {
     "#}
 }
 
-pub const SHOCK_SHADER: &str = r#"// The Wunderwaffe's shock: bolts from the gun at the bottom of the screen out to its edges, in
-// blocks of Doom's pixels (200 rows a screen), flickering 24 times a second; `strength` fades it.
+pub const SHOCK_SHADER: &str = r#"// The Wunderwaffe's shock: lightning crawling all around the gun in hand, jagged arcs jumping
+// between points of a ring about where the gun sits on screen (bottom right of centre), in blocks
+// of Doom's pixels (200 rows a screen), flickering 24 times a second; `strength` fades it.
 
 float hash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
@@ -674,11 +700,11 @@ float wobble(float x, float seed) {
 // How far p is from a jagged bolt between a and b
 float bolt(vec2 p, vec2 a, vec2 b, float seed) {
     vec2 ab = b - a;
-    float len = length(ab);
+    float len = max(length(ab), 0.0001);
     vec2 dir = ab / len;
     vec2 side = vec2(-dir.y, dir.x);
     float s = clamp(dot(p - a, dir) / len, 0.0, 1.0);
-    float bend = (wobble(s * 9.0, seed) - 0.5) * 0.18 + (wobble(s * 37.0, seed + 7.0) - 0.5) * 0.05;
+    float bend = (wobble(s * 7.0, seed) - 0.5) * 0.35 + (wobble(s * 29.0, seed + 7.0) - 0.5) * 0.12;
     vec2 along = a + ab * s + side * bend * sin(3.14159 * s) * len;
     return length(p - along);
 }
@@ -690,26 +716,33 @@ void main() {
     vec4 scene = texture(InputTexture, TexCoord);
     float aspect = size.x / size.y;
     vec2 p = vec2(cell.x * aspect, cell.y);
-    vec2 gun = vec2(0.5 * aspect, 0.2);
+    // the ring around the gun: its centre, and how far it reaches across and up
+    vec2 centre = vec2((0.5 + 0.17) * aspect, 0.2);
+    vec2 reach = vec2(0.24 * aspect, 0.28);
     float pixel = block / size.y;
     float flicker = floor(shockTime * 24.0);
     float glow = 0.0;
     float core = 0.0;
-    for (int i = 0; i < 5; ++i) {
-        float seed = flicker * 5.0 + float(i);
-        if (hash(vec2(seed, 1.0)) > strength + 0.25) {
+    for (int i = 0; i < 9; ++i) {
+        float seed = flicker * 9.0 + float(i);
+        if (hash(vec2(seed, 1.0)) > strength * 0.8 + 0.3) {
             continue;
         }
-        float angle = 3.14159 * (0.05 + 0.9 * hash(vec2(seed, 2.0)));
-        vec2 reach = gun + vec2(cos(angle) * aspect * 0.6, sin(angle) * 0.85);
-        float d = bolt(p, gun, reach, seed);
-        core = max(core, step(d, pixel));
-        glow = max(glow, 1.0 - smoothstep(0.0, pixel * 6.0, d));
+        // an arc from one point of the ring to another a little way round, in or out a bit
+        float from = 6.28318 * hash(vec2(seed, 2.0));
+        float to = from + (0.5 + 1.1 * hash(vec2(seed, 3.0))) * (hash(vec2(seed, 4.0)) < 0.5 ? -1.0 : 1.0);
+        float r1 = 0.85 + 0.3 * hash(vec2(seed, 5.0));
+        float r2 = 0.85 + 0.3 * hash(vec2(seed, 6.0));
+        vec2 a = centre + vec2(cos(from), sin(from)) * reach * r1;
+        vec2 b = centre + vec2(cos(to), sin(to)) * reach * r2;
+        float d = bolt(p, a, b, seed);
+        core = max(core, step(d, pixel * 1.5));
+        glow = max(glow, 1.0 - smoothstep(0.0, pixel * 7.0, d));
     }
     vec3 arc = vec3(0.5, 0.85, 1.0);
     vec3 colour = mix(scene.rgb, scene.rgb * vec3(0.8, 0.95, 1.25), strength * 0.5);
-    colour += arc * glow * 0.6 * strength;
-    colour = mix(colour, vec3(1.0), core * min(1.0, strength * 1.5));
+    colour += arc * glow * 0.8 * strength;
+    colour = mix(colour, vec3(0.92, 0.98, 1.0), core * min(1.0, strength * 1.6));
     FragColor = vec4(colour, scene.a);
 }
 "#;

@@ -535,7 +535,7 @@ fn gun_states(
                     .always("Goto Ready;")
             })
         })
-        // Empty: a click, then the reload if there is anything to load
+        // Empty: only a click; reloading is the reload key's
         .always("Dry:")
         .indented(|code| {
             code.when_some(built.sound_line("dry", "CHAN_WEAPON"), |c, l| c.always(l))
@@ -543,9 +543,7 @@ fn gun_states(
                     "{} 6;",
                     built.still(&variant("idle", tesla.then_some(0)))
                 ))
-                // the flamethrower's tank refills by itself
-                .when(flame, |code| code.always("Goto Ready;"))
-                .otherwise(|code| code.always("Goto Reload;"))
+                .always("Goto Ready;")
         })
         .when(flame, |code| code.always("Reload:").indented(|code| code.always("Goto Ready;")))
         .otherwise(|code| code.append(reload_states(built)))
