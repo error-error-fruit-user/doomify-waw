@@ -22,6 +22,7 @@ pub fn weapon(p: &str) -> String {
             meta Sound cooldownSound;
             int lastBurned;
             bool overheated;
+            int joltTics;           // the Wunderwaffe jolting to life: the hands shake, the screen shocks
 
             property AimZoom: aimZoom;
             property Regenerates: regenerates;
@@ -29,6 +30,7 @@ pub fn weapon(p: &str) -> String {
             property IgniteSound: igniteSound;
             property CooldownSound: cooldownSound;
 
+            const JOLT_TICS = 24;
             const REFILL_DELAY = 12;    // tics after the last flame before the tank refills
             const BURN_CHANNEL = CHAN_7;
 
@@ -134,8 +136,30 @@ pub fn weapon(p: &str) -> String {
 
             // The flamethrower's sound and tank: it roars while flames come out, and refills a
             // round a tic once it has been quiet a moment
+            // Its switch thrown, the Wunderwaffe comes back to life with a jolt
+            action void Jolt() {{
+                invoker.joltTics = JOLT_TICS;
+                A_SetBlend("7fd8ff", 0.25, 10);
+            }}
+
+            // The hands shaking with the jolt, less and less, then still again
+            void Shake() {{
+                if (self.joltTics <= 0 || self.owner == null || self.owner.player == null || self.owner.player.ReadyWeapon != self) {{
+                    return;
+                }}
+                let layer = self.owner.player.FindPSprite(PSP_WEAPON);
+                --self.joltTics;
+                if (layer == null) {{
+                    return;
+                }}
+                let strength = double(self.joltTics) / JOLT_TICS;
+                layer.x = FRandom[Doomify](-5, 5) * strength;
+                layer.y = WEAPONTOP + FRandom[Doomify](-3, 4) * strength;
+            }}
+
             override void DoEffect() {{
                 super.DoEffect();
+                self.Shake();
                 if (!self.regenerates || self.owner == null || self.owner.player == null) {{
                     return;
                 }}
@@ -297,6 +321,8 @@ pub fn weapon(p: &str) -> String {
             }}
 
             override void Impact() {{
+                // it does no damage of its own: a box it hits is knocked by hand
+                HH_MysteryBox.Knock(self.tracer, self.pos, 400);
                 let arc = {p}_TeslaArc(Actor.Spawn('{p}_TeslaArc', self.pos));
                 if (arc != null) {{
                     arc.target = self.target;
@@ -595,3 +621,95 @@ pub fn weapon(p: &str) -> String {
         }}
     "#####}
 }
+
+/// What the screen does while a Wunderwaffe jolts to life: the shock shader (`shock_shader`),
+/// switched on for the player whose gun it is, fading with the jolt.
+pub fn shock(p: &str) -> String {
+    formatdoc! {r#"
+        // The shock on screen while the Wunderwaffe in hand jolts to life (GLDEFS' {p}_Shock)
+        class {p}_DoomifyShock : EventHandler {{
+            override void UiTick() {{
+                let player = players[consolePlayer];
+                let weapon = {p}_DoomifyWeapon(player.ReadyWeapon);
+                if (weapon != null && weapon.joltTics > 0) {{
+                    Shader.SetEnabled(player, "{p}_Shock", true);
+                    Shader.SetUniform1f(player, "{p}_Shock", "strength", double(weapon.joltTics) / {p}_DoomifyWeapon.JOLT_TICS);
+                    Shader.SetUniform1f(player, "{p}_Shock", "shockTime", level.maptime / double(TICRATE));
+                }} else {{
+                    Shader.SetEnabled(player, "{p}_Shock", false);
+                }}
+            }}
+        }}
+    "#}
+}
+
+/// The shock: jagged bolts of light from the gun to the edges of the screen, flickering, drawn at
+/// Doom's pixel size so they look like the rest of the game, and a cold tint over everything.
+pub fn shock_gldefs(p: &str) -> String {
+    formatdoc! {r#"
+        // The Wunderwaffe's shock, switched on by {p}_DoomifyShock
+        HardwareShader PostProcess scene
+        {{
+            Name "{p}_Shock"
+            Shader "shaders/doomify/shock.fp" 330
+            Uniform float strength
+            Uniform float shockTime
+        }}
+    "#}
+}
+
+pub const SHOCK_SHADER: &str = r#"// The Wunderwaffe's shock: bolts from the gun at the bottom of the screen out to its edges, in
+// blocks of Doom's pixels (200 rows a screen), flickering 24 times a second; `strength` fades it.
+
+float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+float wobble(float x, float seed) {
+    float i = floor(x);
+    float f = fract(x);
+    return mix(hash(vec2(i, seed)), hash(vec2(i + 1.0, seed)), f * f * (3.0 - 2.0 * f));
+}
+
+// How far p is from a jagged bolt between a and b
+float bolt(vec2 p, vec2 a, vec2 b, float seed) {
+    vec2 ab = b - a;
+    float len = length(ab);
+    vec2 dir = ab / len;
+    vec2 side = vec2(-dir.y, dir.x);
+    float s = clamp(dot(p - a, dir) / len, 0.0, 1.0);
+    float bend = (wobble(s * 9.0, seed) - 0.5) * 0.18 + (wobble(s * 37.0, seed + 7.0) - 0.5) * 0.05;
+    vec2 along = a + ab * s + side * bend * sin(3.14159 * s) * len;
+    return length(p - along);
+}
+
+void main() {
+    vec2 size = vec2(textureSize(InputTexture, 0));
+    float block = max(1.0, floor(size.y / 200.0));
+    vec2 cell = (floor(TexCoord * size / block) + 0.5) * block / size;
+    vec4 scene = texture(InputTexture, TexCoord);
+    float aspect = size.x / size.y;
+    vec2 p = vec2(cell.x * aspect, cell.y);
+    vec2 gun = vec2(0.5 * aspect, 0.2);
+    float pixel = block / size.y;
+    float flicker = floor(shockTime * 24.0);
+    float glow = 0.0;
+    float core = 0.0;
+    for (int i = 0; i < 5; ++i) {
+        float seed = flicker * 5.0 + float(i);
+        if (hash(vec2(seed, 1.0)) > strength + 0.25) {
+            continue;
+        }
+        float angle = 3.14159 * (0.05 + 0.9 * hash(vec2(seed, 2.0)));
+        vec2 reach = gun + vec2(cos(angle) * aspect * 0.6, sin(angle) * 0.85);
+        float d = bolt(p, gun, reach, seed);
+        core = max(core, step(d, pixel));
+        glow = max(glow, 1.0 - smoothstep(0.0, pixel * 6.0, d));
+    }
+    vec3 arc = vec3(0.5, 0.85, 1.0);
+    vec3 colour = mix(scene.rgb, scene.rgb * vec3(0.8, 0.95, 1.25), strength * 0.5);
+    colour += arc * glow * 0.6 * strength;
+    colour = mix(colour, vec3(1.0), core * min(1.0, strength * 1.5));
+    FragColor = vec4(colour, scene.a);
+}
+"#;

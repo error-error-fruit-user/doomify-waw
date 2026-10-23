@@ -202,11 +202,13 @@ def finished(folder, count):
 def light_bulbs(objects, glow, lit):
     """Makes the glowing parts (`glow["materials"]`) of the first `lit` bulbs (`glow["bones"]`,
     the bones they hang on) emit light, the way the Wunderwaffe shows its rounds: the filament
-    burns and the glass around it glows, or the glass would hide it. Returns what to put back."""
+    burns and the glass around it glows, or the glass would hide it. The others are dark: black
+    glass around a dead filament. Returns what to put back."""
     undo = []
     if not glow or lit is None:
         return undo
-    bones = set(glow["bones"][:lit])
+    lit_bones = set(glow["bones"][:lit])
+    dark_bones = set(glow["bones"][lit:])
     for obj in objects:
         if obj.type != "MESH":
             continue
@@ -217,16 +219,19 @@ def light_bulbs(objects, glow, lit):
             if material is None or not any(part in material.name for part in glow["materials"]):
                 continue
             kind = "glass" if "glass" in material.name.lower() else "filament"
-            if kind not in lit_indices:
-                lit_indices[kind] = len(obj.material_slots)
-                obj.data.materials.append(bulb_material(kind))
+            for state in ("lit", "dark"):
+                if (state, kind) not in lit_indices:
+                    lit_indices[(state, kind)] = len(obj.material_slots)
+                    obj.data.materials.append(bulb_material(kind) if state == "lit" else dark_bulb_material(kind))
             for polygon in obj.data.polygons:
                 if polygon.material_index != index:
                     continue
                 weights = obj.data.vertices[polygon.vertices[0]].groups
-                if weights and groups[max(weights, key=lambda g: g.weight).group] in bones:
+                bone = groups[max(weights, key=lambda g: g.weight).group] if weights else None
+                state = "lit" if bone in lit_bones else "dark" if bone in dark_bones else None
+                if state is not None:
                     undo.append((obj, polygon.index, index))
-                    polygon.material_index = lit_indices[kind]
+                    polygon.material_index = lit_indices[(state, kind)]
     return undo
 
 
@@ -247,6 +252,19 @@ def bulb_material(kind):
         shader.inputs["Base Color"].default_value = (0.55, 0.85, 1.0, 1)
         colour.default_value = (0.75, 0.95, 1.0, 1)
         shader.inputs["Emission Strength"].default_value = 30.0
+    return material
+
+
+def dark_bulb_material(kind):
+    """A bulb that is out: black glass with a little shine, and a dead filament inside."""
+    name = f"Dark bulb {kind}"
+    if name in bpy.data.materials:
+        return bpy.data.materials[name]
+    material = bpy.data.materials.new(name)
+    material.use_nodes = True
+    shader = material.node_tree.nodes["Principled BSDF"]
+    shader.inputs["Base Color"].default_value = (0.012, 0.012, 0.014, 1) if kind == "glass" else (0.03, 0.03, 0.03, 1)
+    shader.inputs["Roughness"].default_value = 0.15 if kind == "glass" else 0.6
     return material
 
 

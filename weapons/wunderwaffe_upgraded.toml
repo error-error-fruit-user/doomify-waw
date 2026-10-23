@@ -55,6 +55,8 @@ happy = "tesla_happy"
 hum = "tesla_idle"
 
 [view]
+# the reload switches the bulbs off; flipped back on, the gun jolts to life
+lights_on = "tesla_switch_flip_on"
 ads_fov = 55
 
 # Doom's plasma, from the IWAD, turned the DG-3 JZ's pink

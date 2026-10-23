@@ -1,9 +1,10 @@
-//! The text of the generated pk3: ZScript, SNDINFO, MAPINFO and KEYCONF.
+//! The text of the generated pk3: ZScript, SNDINFO and MAPINFO. The equipment is Horde Hammer's
+//! (HH_Weapon.Equipment, on its equipment key).
 
 pub mod base;
 pub mod weapon;
 
-use crate::{code::Code, project::Project, sounds::SoundSet, weapon::Kind};
+use crate::{code::Code, project::Project, sounds::SoundSet};
 use indoc::formatdoc;
 use std::collections::BTreeMap;
 use weapon::{Built, sound};
@@ -17,10 +18,7 @@ pub fn files(
     let p = &project.config.prefix;
     let mut files = BTreeMap::new();
     files.insert("zscript/doomify/base.zs".into(), base::weapon(p));
-    files.insert(
-        "zscript/doomify/equipment.zs".into(),
-        equipment(project, built),
-    );
+    files.insert("zscript/doomify/shock.zs".into(), base::shock(p));
     for weapon in built {
         files.insert(
             format!("zscript/doomify/{}.zs", weapon.id),
@@ -39,9 +37,10 @@ pub fn files(
             })
             .build(),
     );
+    files.insert("GLDEFS.txt".into(), base::shock_gldefs(p));
+    files.insert("shaders/doomify/shock.fp".into(), base::SHOCK_SHADER.into());
     files.insert("SNDINFO.txt".into(), sndinfo(project, sounds));
     files.insert("MAPINFO.txt".into(), mapinfo(project, built));
-    files.insert("KEYCONF.txt".into(), keyconf(built));
     files.insert(
         "DOOMIFY.txt".into(),
         formatdoc! {r#"
@@ -50,87 +49,6 @@ pub fn files(
         "#},
     );
     files
-}
-
-/// The equipment the equipment key goes through, the most valuable first: the monkey, the
-/// Betty, the Bowie knife, then grenades.
-fn equipment_order<'a>(built: &'a [Built<'a>]) -> Vec<&'a Built<'a>> {
-    let rank = |kind| match kind {
-        Kind::Monkey => Some(0),
-        Kind::Mine => Some(1),
-        Kind::Melee => Some(2),
-        Kind::Grenade => Some(3),
-        _ => None,
-    };
-    let mut order: Vec<_> = built
-        .iter()
-        .filter(|b| rank(b.weapon.kind).is_some())
-        .collect();
-    order.sort_by_key(|b| rank(b.weapon.kind));
-    order
-}
-
-/// The equipment key: one key brings up the equipment, again the next piece the player has.
-fn equipment(project: &Project, built: &[Built]) -> String {
-    let p = &project.config.prefix;
-    let order = equipment_order(built);
-    let pushes = Code::new()
-        .each(&order, |code, b| {
-            code.always(format!(
-                "order.Push((class<Weapon>)('{}'));",
-                project.class(b.id)
-            ))
-        })
-        .indented(|c| c);
-    formatdoc! {r#"
-        // The equipment key (KEYCONF's waw_equipment): brings up the most valuable equipment the
-        // player has (the cymbal monkey, the Bouncing Betty, the Bowie knife, then grenades), and
-        // pressed again the next one after what is in hand. Input arrives as a network event, so
-        // every machine does the same.
-
-        class {p}_DoomifyEquipment : EventHandler {{
-            override void NetworkProcess(ConsoleEvent e) {{
-                if (e.Name != "doomify_equipment" || e.Player < 0 || e.Player >= MAXPLAYERS || !playeringame[e.Player]) {{
-                    return;
-                }}
-                let player = players[e.Player];
-                if (player.mo == null || player.mo.health <= 0) {{
-                    return;
-                }}
-                Array<class<Weapon> > order;
-        {pushes}
-                let current = player.ReadyWeapon;
-                let start = 0;
-                if (current != null) {{
-                    let at = order.Find(current.GetClass());
-                    if (at != order.Size()) {{
-                        start = at + 1;
-                    }}
-                }}
-                // the first press starts from the top of the list, the next ones after what is in hand
-                for (let i = 0; i < order.Size(); ++i) {{
-                    let held = Weapon(player.mo.FindInventory(order[(start + i) % order.Size()]));
-                    if (held != null && held != current && (held.ammoType1 == null || player.mo.CountInv(held.ammoType1) > 0)) {{
-                        player.PendingWeapon = held;
-                        return;
-                    }}
-                }}
-            }}
-        }}
-    "#, pushes = indent(&pushes.build(), 8)}
-}
-
-fn indent(text: &str, spaces: usize) -> String {
-    text.lines()
-        .map(|line| {
-            if line.is_empty() {
-                String::new()
-            } else {
-                format!("{}{line}", " ".repeat(spaces))
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
 }
 
 /// Every pulled alias as `waw/<alias>` (a `$random` of its variants), and the sound sets' names
@@ -176,9 +94,9 @@ fn mapinfo(project: &Project, built: &[Built]) -> String {
         .filter(|(id, _)| built.iter().any(|b| b.id == id.as_str()))
         .collect();
     Code::new()
-        .always("// The equipment key's handler, and the wall drawings' editor numbers, from doomify.toml")
+        .always("// The Wunderwaffe's shock on screen, and the wall drawings' editor numbers (doomify.toml)")
         .block("GameInfo", |code| {
-            code.always(format!("AddEventHandlers = \"{p}_DoomifyEquipment\""))
+            code.always(format!("AddEventHandlers = \"{p}_DoomifyShock\""))
         })
         .when(!numbers.is_empty(), |code| {
             code.gap().block("DoomEdNums", |code| {
@@ -188,18 +106,4 @@ fn mapinfo(project: &Project, built: &[Built]) -> String {
             })
         })
         .build()
-}
-
-fn keyconf(built: &[Built]) -> String {
-    let names: Vec<_> = equipment_order(built)
-        .iter()
-        .map(|b| b.weapon.name.clone())
-        .collect();
-    formatdoc! {r#"
-        // The equipment key: {names}
-        alias waw_equipment "netevent doomify_equipment"
-        addkeysection "World at War" doomify_waw
-        addmenukey "Equipment ({names})" waw_equipment
-        defaultbind g waw_equipment
-    "#, names = names.join(", ")}
 }

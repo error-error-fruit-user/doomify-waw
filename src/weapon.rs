@@ -230,6 +230,10 @@ pub struct View {
     /// swing) to hold it at while it is up; the frame showing most of it when unset.
     #[serde(default)]
     pub hold_frame: Option<usize>,
+    /// The Wunderwaffe: the reload's notetrack where its switch turns the bulbs back on; before
+    /// it they are dark, at it the gun jolts to life.
+    #[serde(default)]
+    pub lights_on: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -261,6 +265,9 @@ pub struct Weapon {
     /// Its rank as the pistol for going down (the highest held wins; 0 for never).
     #[serde(default)]
     pub last_stand: u32,
+    /// The weapon (by file name) given for the last stand instead, when this is the pistol.
+    #[serde(default)]
+    pub downed: Option<String>,
     /// Bought off the wall.
     #[serde(default)]
     pub wall: Option<Wall>,

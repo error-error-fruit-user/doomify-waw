@@ -23,6 +23,8 @@ pub struct Built<'a> {
     pub chalk: Option<Frame>,
     /// Its upgrade is in this build (a build of only some weapons may leave it out).
     pub upgrade_built: bool,
+    /// Its last stand replacement is in this build.
+    pub downed_built: bool,
 }
 
 /// How long a frame lasts and what it does.
@@ -132,6 +134,49 @@ impl Built<'_> {
     }
 
     /// The notetrack sounds of the clip of `role`, by the frame they play on.
+    /// The frame of `role`'s clip where its notetrack `track` falls.
+    fn event_frame(&self, role: &str, track: &str) -> Option<usize> {
+        let clip = self.weapon.clip(role)?;
+        let pulled = self
+            .pulled
+            .clips
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case(clip))
+            .map(|(_, c)| c)?;
+        pulled
+            .events
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case(track))
+            .map(|(_, time)| (*time as f64 * 35.0).round() as usize)
+    }
+
+    /// A reload's frames and sounds; the Wunderwaffe's are dark until its switch turns the bulbs
+    /// on (`view.lights_on`), where it jolts to life (`Jolt`), and lit from there.
+    fn reload_frames(&self, role: &str, render: &str) -> (Vec<Frame>, BTreeMap<usize, Vec<String>>) {
+        let lit = self.get(render);
+        let mut events = self.events(role, lit.len());
+        let dark = variant(role, Some(0));
+        let switch = self
+            .weapon
+            .view
+            .lights_on
+            .as_deref()
+            .filter(|_| self.has(&dark))
+            .and_then(|track| self.event_frame(role, track))
+            .filter(|on| *on < lit.len());
+        let Some(on) = switch else {
+            return (lit.to_vec(), events);
+        };
+        let dark = self.get(&dark);
+        let frames = dark[..on.min(dark.len())]
+            .iter()
+            .chain(&lit[on..])
+            .cloned()
+            .collect();
+        events.entry(on).or_default().push("TNT1 A 0 Jolt;".into());
+        (frames, events)
+    }
+
     fn events(&self, role: &str, count: usize) -> BTreeMap<usize, Vec<String>> {
         let mut events: BTreeMap<usize, Vec<String>> = BTreeMap::new();
         let Some(clip) = self.weapon.clip(role) else {
@@ -581,24 +626,16 @@ fn reload_states(built: &Built) -> Code {
             })
         })
         .otherwise(|code| {
+            let (shown, events) = built.reload_frames("reload", &reload);
             code.indented(|code| {
-                code.append(frames(
-                    Code::new(),
-                    built.get(&reload),
-                    Tic::Reload,
-                    &built.events("reload", built.get(&reload).len()),
-                ))
-                .always("TNT1 A 0 Reload;")
-                .always("Goto Ready;")
+                code.append(frames(Code::new(), &shown, Tic::Reload, &events))
+                    .always("TNT1 A 0 Reload;")
+                    .always("Goto Ready;")
             })
             .when(built.has(&reload_empty), |code| {
+                let (shown, events) = built.reload_frames("reload_empty", &reload_empty);
                 code.always("ReloadEmpty:").indented(|code| {
-                    code.append(frames(
-                        Code::new(),
-                        built.get(&reload_empty),
-                        Tic::Reload,
-                        &built.events("reload_empty", built.get(&reload_empty).len()),
-                    ))
+                    code.append(frames(Code::new(), &shown, Tic::Reload, &events))
                     .always("TNT1 A 0 Reload;")
                     .always("Goto Ready;")
                 })
@@ -865,6 +902,7 @@ fn melee_file(project: &Project, built: &Built, header: String) -> String {
                 Default {{
                     Tag "{name}";
                     HH_Weapon.Counted false;
+                    HH_Weapon.Equipment true;
                     HH_Weapon.BoxWeight 0;
                     +WEAPON.CHEATNOTWEAPON
                     +INVENTORY.UNDROPPABLE
@@ -1222,6 +1260,7 @@ pub fn file(project: &Project, built: &Built) -> String {
         })
         .when(thrown || melee, |code| {
             code.always("HH_Weapon.Counted false;")
+                .always("HH_Weapon.Equipment true;")
         })
         .always(format!(
             "HH_Weapon.BoxWeight {};",
@@ -1234,6 +1273,10 @@ pub fn file(project: &Project, built: &Built) -> String {
         .when(weapon.last_stand > 0, |code| {
             code.always(format!("HH_Weapon.LastStand {};", weapon.last_stand))
         })
+        .when_some(
+            weapon.downed.as_ref().filter(|_| built.downed_built),
+            |code, downed| code.always(format!("HH_Weapon.Downed \"{}\";", project.class(downed))),
+        )
         .when_some(
             weapon.upgrade.as_ref().filter(|_| built.upgrade_built),
             |code, upgrade| {

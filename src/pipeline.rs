@@ -231,6 +231,7 @@ fn assemble(project: &Project, ids: &[String], work: &Path) -> Result<()> {
             pickup,
             chalk,
             upgrade_built: weapon.upgrade.as_ref().is_some_and(|u| ids.contains(u)),
+            downed_built: weapon.downed.as_ref().is_some_and(|d| ids.contains(d)),
         })
     };
     let cores = std::thread::available_parallelism().map_or(4, |n| n.get());
