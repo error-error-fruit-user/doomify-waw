@@ -201,8 +201,8 @@ def finished(folder, count):
 
 def light_bulbs(objects, glow, lit):
     """Makes the glowing parts (`glow["materials"]`) of the first `lit` bulbs (`glow["bones"]`,
-    the bones they hang on) emit light, the way the Wunderwaffe shows its rounds. Returns what
-    to put back."""
+    the bones they hang on) emit light, the way the Wunderwaffe shows its rounds: the filament
+    burns and the glass around it glows, or the glass would hide it. Returns what to put back."""
     undo = []
     if not glow or lit is None:
         return undo
@@ -211,34 +211,42 @@ def light_bulbs(objects, glow, lit):
         if obj.type != "MESH":
             continue
         groups = {group.index: group.name for group in obj.vertex_groups}
-        lit_index = None
+        lit_indices = {}
         for index, slot in enumerate(obj.material_slots):
             material = slot.material
             if material is None or not any(part in material.name for part in glow["materials"]):
                 continue
-            if lit_index is None:
-                lit_index = len(obj.material_slots)
-                obj.data.materials.append(bulb_material())
+            kind = "glass" if "glass" in material.name.lower() else "filament"
+            if kind not in lit_indices:
+                lit_indices[kind] = len(obj.material_slots)
+                obj.data.materials.append(bulb_material(kind))
             for polygon in obj.data.polygons:
                 if polygon.material_index != index:
                     continue
                 weights = obj.data.vertices[polygon.vertices[0]].groups
                 if weights and groups[max(weights, key=lambda g: g.weight).group] in bones:
                     undo.append((obj, polygon.index, index))
-                    polygon.material_index = lit_index
+                    polygon.material_index = lit_indices[kind]
     return undo
 
 
-def bulb_material():
-    if "Lit bulb" in bpy.data.materials:
-        return bpy.data.materials["Lit bulb"]
-    material = bpy.data.materials.new("Lit bulb")
+def bulb_material(kind):
+    """A burning filament, or the glass lit by it: pale where the filament is white-hot."""
+    name = f"Lit bulb {kind}"
+    if name in bpy.data.materials:
+        return bpy.data.materials[name]
+    material = bpy.data.materials.new(name)
     material.use_nodes = True
     shader = material.node_tree.nodes["Principled BSDF"]
-    shader.inputs["Base Color"].default_value = (0.55, 0.85, 1.0, 1)
     colour = shader.inputs.get("Emission Color") or shader.inputs.get("Emission")
-    colour.default_value = (0.45, 0.8, 1.0, 1)
-    shader.inputs["Emission Strength"].default_value = 30.0
+    if kind == "glass":
+        shader.inputs["Base Color"].default_value = (0.3, 0.7, 1.0, 1)
+        colour.default_value = (0.35, 0.75, 1.0, 1)
+        shader.inputs["Emission Strength"].default_value = 6.0
+    else:
+        shader.inputs["Base Color"].default_value = (0.55, 0.85, 1.0, 1)
+        colour.default_value = (0.75, 0.95, 1.0, 1)
+        shader.inputs["Emission Strength"].default_value = 30.0
     return material
 
 

@@ -18,7 +18,8 @@ reserve = 24
 give = 24
 
 [fire]
-auto = false
+# Full Auto in World at War: holding the trigger keeps firing
+auto = true
 time = 1
 damage = 1
 speed = 60
@@ -55,3 +56,11 @@ hum = "tesla_idle"
 
 [view]
 ads_fov = 55
+
+# Doom's plasma, from the IWAD, turned the DG-3 JZ's pink
+[projectile]
+sprite = "PLSS"
+frames = "AB"
+scale = 0.8
+translation = "0:255=%[0.0,0.0,0.0]:[2.0,1.0,1.6]"
+burst = { sprite = "PLSE", frames = "ABCDE" }

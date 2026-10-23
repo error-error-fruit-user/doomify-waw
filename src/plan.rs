@@ -74,7 +74,7 @@ pub fn full(weapon: &Weapon) -> Option<u32> {
 
 pub fn glow(weapon: &Weapon) -> Option<Glow> {
     (weapon.kind == Kind::Tesla).then(|| Glow {
-        materials: vec!["filament".into()],
+        materials: vec!["filament".into(), "vacuum_tube_glass".into()],
         bones: (1..=bulbs(weapon)).map(|n| format!("j_bulb_{n}")).collect(),
     })
 }

@@ -36,7 +36,7 @@ enum Tic {
     Reload,
     /// The player may act again.
     Recover,
-    /// Drinking: a tic, half as many with Speed Cola.
+    /// Drinking: a tic and a half on average, a tic with Speed Cola.
     Sip,
 }
 
@@ -422,7 +422,8 @@ fn gun_states(
     let has_ads_last = built.has("ads_last_fire");
     code.always("Fire:")
         .indented(|code| {
-            code.always("TNT1 A 0 WhenNoActiveAmmo(\"Dry\");")
+            code.when(flame, |code| code.always("TNT1 A 0 WhenOverheated(\"Dry\");"))
+                .otherwise(|code| code.always("TNT1 A 0 WhenNoActiveAmmo(\"Dry\");"))
                 .when(aims, |code| {
                     code.always("TNT1 A 0 WhenZoomed(\"ZoomFireNext\");")
                 })
@@ -441,9 +442,9 @@ fn gun_states(
         })
         .when(flame, |code| {
             // The flamethrower burns for as long as the trigger is held
+            // (it roars and cools down by itself: DoEffect)
             code.always("FireShot:").indented(|code| {
-                code.when_some(built.sound_line("fire", "CHAN_WEAPON"), |c, l| c.always(l))
-                    .each(
+                code.each(
                         built.get("fire").iter().take(built.cycle().max(4)),
                         |code, frame| {
                             let (sprite, letter) = frame.state();
@@ -497,9 +498,12 @@ fn gun_states(
                     "{} 6;",
                     built.still(&variant("idle", tesla.then_some(0)))
                 ))
-                .always("Goto Reload;")
+                // the flamethrower's tank refills by itself
+                .when(flame, |code| code.always("Goto Ready;"))
+                .otherwise(|code| code.always("Goto Reload;"))
         })
-        .append(reload_states(built))
+        .when(flame, |code| code.always("Reload:").indented(|code| code.always("Goto Ready;")))
+        .otherwise(|code| code.append(reload_states(built)))
         .when(aims, |code| {
             aim_states(
                 code,
@@ -956,15 +960,11 @@ fn drink_file(project: &Project, built: &Built, header: String) -> String {
         .entry(swallow)
         .or_default()
         .push("TNT1 A 0 Consume;".into());
+    // World at War takes the bottle away once it is drunk: its lower clip would show it full
+    // again
     let ready = Code::new().always("Ready:").indented(|code| {
         code.when_some(built.sound_line("raise", "CHAN_WEAPON"), |c, l| c.always(l))
             .append(frames(Code::new(), drink, Tic::Sip, &events))
-            .append(frames(
-                Code::new(),
-                built.get("drop"),
-                Tic::Sip,
-                &built.events("drop", built.get("drop").len()),
-            ))
             .always("TNT1 A 0 Consume;")
             .always("TNT1 A 0 A_StartSound(\"hh/bottle_break\", CHAN_AUTO);")
             .always("Goto Deselect;")
@@ -981,10 +981,14 @@ fn drink_file(project: &Project, built: &Built, header: String) -> String {
             .always("}")
     };
     let sip = formatdoc! {r#"
-        // A frame of drinking: it can still be thrown; Speed Cola drinks twice as fast
+        int sips;
+
+        // A frame of drinking, a tic and a half on average so that it is savoured; it can still
+        // be thrown. Speed Cola drinks it in a tic.
         action void Sip() {{
             A_WeaponReady(WRF_NOSWITCH | WRF_NOBOB);
-            A_SetTics(invoker.reloadFrameRate < invoker.Default.reloadFrameRate && (level.maptime & 1) != 0? 0: 1);
+            let quick = invoker.reloadFrameRate < invoker.Default.reloadFrameRate;
+            A_SetTics(quick? 1: 1 + (invoker.sips++ & 1));
         }}
     "#};
     let solo = perk == "QuickRevive";
@@ -1034,6 +1038,44 @@ fn wall_drawing(project: &Project, built: &Built) -> Code {
 }
 
 /// What the weapon fires, when it fires a thing.
+/// What a projectile's `[projectile]` look adds to its class: its defaults, and its states (it
+/// flies as its frames, bursts as its burst's); empty for one drawn only by its light and particles.
+fn look(project: &Project, weapon: &Weapon) -> (String, String) {
+    let Some(look) = &weapon.projectile else {
+        return (String::new(), String::new());
+    };
+    let p = &project.config.prefix;
+    let defaults = Code::new()
+        .always(format!("Scale {:.3};", look.scale))
+        .when(look.pulse, |code| code.always(format!("{p}_DoomifyShot.Pulse true;")))
+        .when_some(look.translation.as_ref(), |code, translation| {
+            code.always(format!("Translation \"{translation}\";"))
+        })
+        .build();
+    let states = Code::new()
+        .always("States {")
+        .always("Spawn:")
+        .indented(|code| {
+            code.always(format!("{} {} 2;", look.sprite, look.frames))
+                .always("Loop;")
+        })
+        .when_some(look.burst.as_ref(), |code, burst| {
+            code.always("Death:").indented(|code| {
+                code.always("TNT1 A 0 Impact;")
+                    .always(format!("TNT1 A 0 A_SetScale({:.3});", burst.scale))
+                    .always(format!("{} {} 2 Bright;", burst.sprite, burst.frames))
+                    .always("Stop;")
+            })
+        })
+        .always("}")
+        .build();
+    // each line after the one before it, at the class's indentation
+    let lines = |text: String, indent: &str| -> String {
+        text.lines().map(|line| format!("\n{indent}{line}")).collect()
+    };
+    (lines(defaults, "        "), format!("\n{}", lines(states, "    ")))
+}
+
 fn shot_class(project: &Project, built: &Built) -> Code {
     let weapon = built.weapon;
     let class = project.class(built.id);
@@ -1058,6 +1100,7 @@ fn shot_class(project: &Project, built: &Built) -> Code {
         .filter(|a| built.pulled.sounds.contains_key(*a))
         .map(|a| sound(a))
         .unwrap_or_default();
+    let (look_defaults, look_states) = look(project, weapon);
     Code::new()
         .when(matches!(weapon.kind, Kind::Projectile), |code| {
             code.always(formatdoc! {r#"
@@ -1068,8 +1111,8 @@ fn shot_class(project: &Project, built: &Built) -> Code {
                         {p}_DoomifyShot.TrailColor "{color}";
                         {p}_DoomifyShot.Splash {splash};
                         {p}_DoomifyShot.SplashDamage {damage};
-                        {p}_DoomifyShot.ImpactSound "{impact}";
-                    }}
+                        {p}_DoomifyShot.ImpactSound "{impact}";{look_defaults}
+                    }}{look_states}
                 }}
             "#, splash = weapon.fire.splash})
         })
@@ -1082,8 +1125,8 @@ fn shot_class(project: &Project, built: &Built) -> Code {
                         {p}_DoomifyShot.TrailColor "{color}";
                         {p}_DoomifyShot.ImpactSound "{impact}";
                         {p}_TeslaBolt.Arcs {arcs};
-                        {p}_TeslaBolt.ArcRange {range};
-                    }}
+                        {p}_TeslaBolt.ArcRange {range};{look_defaults}
+                    }}{look_states}
                 }}
             "#, arcs = weapon.fire.arcs, range = weapon.fire.arc_range})
         })
@@ -1198,6 +1241,20 @@ pub fn file(project: &Project, built: &Built) -> String {
             },
         )
         .always(format!("{p}_DoomifyWeapon.AimZoom {aim_zoom:.2};"))
+        .when(weapon.kind == Kind::Flame, |code| {
+            let named = |role: &str| {
+                weapon
+                    .sounds
+                    .get(role)
+                    .filter(|a| built.pulled.sounds.contains_key(*a))
+                    .map(|a| sound(a))
+                    .unwrap_or_default()
+            };
+            code.always(format!("{p}_DoomifyWeapon.Regenerates true;"))
+                .always(format!("{p}_DoomifyWeapon.BurnSound \"{}\";", named("loop")))
+                .always(format!("{p}_DoomifyWeapon.IgniteSound \"{}\";", named("fire")))
+                .always(format!("{p}_DoomifyWeapon.CooldownSound \"{}\";", named("cooldown")))
+        })
         .when(weapon.fire.auto, |code| code.always("-WEAPON.NOAUTOFIRE"))
         .when(thrown, |code| code.always("+WEAPON.NOAUTOAIM"));
 

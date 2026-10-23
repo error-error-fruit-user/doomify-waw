@@ -19,7 +19,8 @@ reserve = 160
 give = 160
 
 [fire]
-auto = false
+# Full Auto in World at War: holding the trigger keeps firing
+auto = true
 time = 0.33
 damage = 1000
 splash = 80
@@ -52,3 +53,11 @@ impact = "weap_rgun_exp"
 
 [view]
 ads_fov = 55
+
+# ZDL's Ray Gun bolt (the map's RAYL and RAYX sprites), red as Porter's X2 fires it
+[projectile]
+sprite = "RAYL"
+scale = 0.25
+pulse = true
+translation = "0:255=%[0.0,0.0,0.0]:[2.0,0.35,0.35]"
+burst = { sprite = "RAYX", frames = "ABCDE", scale = 1.728 }

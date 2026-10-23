@@ -44,10 +44,20 @@ pub fn build(project: &Project, options: &Options) -> Result<()> {
     let work = project.work();
     fs::create_dir_all(&work)?;
     let work = work.canonicalize()?;
-    let weapon_key = |id: &str| project.keyed(id, &project.weapon_file(id));
+    let weapon_key = |id: &str| project.weapon_key(id);
     let sound_key = |id: &str| project.keyed(&format!("sounds-{id}"), &project.sound_file(id));
     let pull = |key: &str| work.join("pull").join(key);
     let frames = |key: &str| work.join("frames").join(key);
+    // Caches from before weapons were keyed on what they render move to their new keys
+    for id in &ids {
+        let (old, new) = (project.legacy_weapon_key(id), weapon_key(id));
+        for kind in ["pull", "frames"] {
+            let (old, new) = (work.join(kind).join(&old), work.join(kind).join(&new));
+            if !new.exists() && old.exists() {
+                fs::rename(old, new)?;
+            }
+        }
+    }
 
     if !options.offline {
         let game = Game::find(options.pid, options.wait)?;
@@ -134,8 +144,7 @@ fn assemble(project: &Project, ids: &[String], work: &Path) -> Result<()> {
         })
         .collect();
     folders.extend(ids.iter().map(|id| {
-        work.join("pull")
-            .join(project.keyed(id, &project.weapon_file(id)))
+        work.join("pull").join(project.weapon_key(id))
     }));
     let mut pulls = BTreeMap::new();
     for folder in &folders {
@@ -173,7 +182,7 @@ fn assemble(project: &Project, ids: &[String], work: &Path) -> Result<()> {
     let one = |index: usize| -> Result<Built> {
         let id = &ids[index];
         let weapon = &project.weapons[id];
-        let key = project.keyed(id, &project.weapon_file(id));
+        let key = project.weapon_key(id);
         let pulled = &pulls[&work.join("pull").join(&key)];
         let folder = work.join("frames").join(&key);
         let rendered: BTreeMap<String, usize> = serde_json::from_str(

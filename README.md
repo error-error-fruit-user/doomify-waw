@@ -14,7 +14,7 @@ You need World at War (Steam) with **Der Riese loaded in solo zombies**, and [Bl
 doomify-waw build path/to/map/doomify        # or just doomify-waw in that folder
 ```
 
-It takes about an hour the first time: it pulls each weapon from the running game, renders it in Blender and turns the frames into sprites. What it rendered is kept in your cache (`~/.cache/doomify-waw`, `%LOCALAPPDATA%\doomify-waw` on Windows) and shared by every map, so the next map, or the next run, only redoes what changed. `--force` redoes everything, `--only thompson` builds one weapon to try things out, `--wait` waits for the game to start, `--blender PATH` picks Blender.
+It takes about an hour the first time: it pulls each weapon from the running game, renders it in Blender and turns the frames into sprites. What it rendered is kept in your cache (`~/.cache/doomify-waw`, `%LOCALAPPDATA%\doomify-waw` on Windows) and shared by every map, so the next map, or the next run, only redoes what changed: a weapon is keyed on what it renders, so changing how it fires doesn't render it again. `--force` redoes everything, `--only thompson` builds one weapon to try things out, `--wait` waits for the game to start, `--blender PATH` picks Blender.
 
 ## How it works
 
@@ -30,11 +30,12 @@ World at War layers its viewmodel animations: a clip (fire, reload) never moves 
 - Frames last a tic each. **Speed Cola** and **Double Tap** (Horde Hammer's `ReloadFrameRate` and `FireFrameRate`) skip frames to play an animation faster, rather than shortening frames that are already a tic.
 - Firing takes World at War's fire time; the rest of the animation can be cut short by firing again. Automatic weapons hold, bolt actions and the Trench Gun work their bolt and pump, the Trench Gun loads one shell at a time and stops if you fire.
 - Aiming zooms by the weapon's own sight (World at War's `adsZoomFov`).
-- Projectiles (Ray Gun, Panzerschrek, rifle grenades, Mustang & Sally) are lights and particles; the flamethrower burns.
+- Projectiles fly as sprites the map or the IWAD has (`[projectile]` in the TOML), with a light and particles: the Ray Guns fire ZDL's bolt that grows and shrinks as it flies (the map's `RAYL` and `RAYX`; red from Porter's X2), the Panzerschrek, the rifle grenades and Mustang & Sally Doom's rocket, the Wunderwaffe Doom's plasma. As in World at War, they keep firing while the trigger is held.
+- The flamethrower roars while it burns and never reloads: its tank refills while it rests, and once emptied it overheats until it is full again.
 - **The Wunderwaffe DG-2** fires a bolt of lightning that kills a zombie and **jumps to the next one it can see**, up to 10 (24 for the DG-3 JZ), each one shaking, sparking and screaming, with a flash and a light at every jump; a big kill makes the gun pleased with itself. Its **three bulbs light up with the rounds left**: every pose is rendered with as many filaments glowing as there are rounds, and each shot puts one out.
 - **Equipment**: one key (G, "World at War" in the controls menu) brings up the best equipment you have, the cymbal monkey, then the Bouncing Betty, the Bowie knife, then grenades; pressed again, the next. Grenades bounce and go off, the Betty is planted and jumps when a zombie comes near, the monkey plays its cymbals and every zombie near goes to it before it goes off.
 - **The Bowie knife**, bought off the wall, plays its flourish, then **replaces the kick**: the kick key stabs with it.
-- **Perks**: Juggernog, Quick Revive, Speed Cola and Double Tap are drunk from Der Riese's bottles, hands and all (`kind = "drink"`, `perk = "Juggernog"`); the class is `<Prefix>_JuggernogDrink`, which the map's own machine sells. Speed Cola drinks twice as fast.
+- **Perks**: Juggernog, Quick Revive, Speed Cola and Double Tap are drunk from Der Riese's bottles, hands and all (`kind = "drink"`, `perk = "Juggernog"`); the class is `<Prefix>_JuggernogDrink`, which the map's own machine sells. Drinking is savoured (a tic and a half a frame, a tic with Speed Cola), and the bottle is gone once drunk; fire while drinking throws it, and it kills the zombie it hits.
 - The M1 Garand's clip **pings** out on its last shot (the sound role `eject`).
 
 ## For a map
@@ -44,6 +45,7 @@ World at War layers its viewmodel animations: a clip (fire, reload) never moves 
 - `doomify.toml`: the class prefix (`Nacht_Thompson`), the pk3 folder to write (replaced on every run; it holds a `DOOMIFY.txt` so nothing else is ever deleted), the damage scale (World at War's damage times this; Horde Hammer's zombies have less health), the map's own pk3 folders (so sprite names never clash) and the wall drawings' editor numbers.
 - `weapons/<id>.toml`: one per weapon (or perk bottle), with World at War's own numbers, read from the running game (`hell-hound list --kind weapon --json`): what to pull, the slot, box weight, last stand rank, wall cost and chalk, ammo, fire time, damage, spread, the clip of every role (`idle`, `fire`, `reload`, `ads_up`...) and the sound of every role.
 - `[view]` in a weapon's TOML tunes how it is rendered: `ads_fov`; `hold = "j_wrist_ri"` carries the model by a bone of the hands where World at War's clip leaves it behind the eye (the monkey); `hold_in = { first_raise = "tag_weapon" }` hangs it exactly on a bone in one render (the Bowie's flourish); `hold_frame` picks the throw frame equipment is held at.
+- `[projectile]` gives what a projectile weapon fires a look, from sprites the map or the IWAD has: `sprite` and `frames` in flight, `scale`, `pulse` (grows and shrinks), a `translation` to recolour it and the `burst` it ends in.
 - `sounds/<set>.toml`: Doom sound names and the aliases they come from (`zombie/normal` is `amb_vocals`).
 
 The generated pk3 folder is loaded **after** the map. The map's player starts with the weapons it wants (`Nacht_Colt`, `Nacht_Stielhandgranate`), and the weapons put themselves in slots. Classes: `<Prefix>_DoomifyWeapon` (the base), one per weapon with its `Ammo`, `Shot` and `Drawing`, `<Prefix>_DoomifyEquipment` (the equipment key). Sounds are `waw/<alias>`. Electrocuted zombies die by `Tesla` damage, burnt ones by `Fire`, blown up ones by `Explosive`: a map's zombie can have states for them.

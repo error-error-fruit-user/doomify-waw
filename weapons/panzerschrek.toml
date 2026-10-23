@@ -20,7 +20,8 @@ reserve = 19
 give = 19
 
 [fire]
-auto = false
+# Full Auto in World at War: holding the trigger keeps firing
+auto = true
 time = 0.33
 damage = 600
 splash = 256
@@ -53,3 +54,9 @@ impact = "grenade_explode"
 
 [view]
 ads_fov = 50
+
+# Doom's rocket and its explosion, from the IWAD
+[projectile]
+sprite = "MISL"
+scale = 1.0
+burst = { sprite = "MISL", frames = "BCD" }

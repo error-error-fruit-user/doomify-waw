@@ -69,6 +69,26 @@ pub struct Project {
     pub sound_sets: BTreeMap<String, SoundSet>,
 }
 
+/// What in a weapon's TOML its pulls and renders depend on: what to pull, the clips and sounds,
+/// how it is drawn, its chalk and kind, and its magazine (the Wunderwaffe's bulbs).
+const RENDERED: &[&str] = &["kind", "game", "animations", "sounds", "view", "wall", "ammo"];
+
+/// `id` and an FNV-1a hash of `content`, the scene and the render version: stable across runs
+/// and platforms, which std's hasher is not.
+fn hashed(id: &str, content: &[u8]) -> String {
+    let hash = [
+        content,
+        crate::blender::SCENE,
+        crate::blender::RENDER_VERSION.as_bytes(),
+    ]
+    .iter()
+    .flat_map(|part| part.iter())
+    .fold(0xcbf29ce484222325u64, |h, b| {
+        (h ^ *b as u64).wrapping_mul(0x100000001b3)
+    });
+    format!("{id}-{:08x}", hash as u32)
+}
+
 /// Sprite name starts that belong to others: Doom's empty sprite and Horde Hammer's.
 const RESERVED_SPRITE_CODES: &[&str] = &["TN", "HH"];
 
@@ -154,19 +174,32 @@ impl Project {
     /// The cache folder for a TOML: its id and a hash of its text, the scene and the render
     /// version, so a change to any of them renders it again.
     pub fn keyed(&self, id: &str, file: &Path) -> String {
-        let text = fs::read(file).unwrap_or_default();
-        // FNV-1a: stable across runs and platforms, which std's hasher is not
-        let hash = [
-            &text[..],
-            crate::blender::SCENE,
-            crate::blender::RENDER_VERSION.as_bytes(),
-        ]
-        .iter()
-        .flat_map(|part| part.iter())
-        .fold(0xcbf29ce484222325u64, |h, b| {
-            (h ^ *b as u64).wrapping_mul(0x100000001b3)
-        });
-        format!("{id}-{:08x}", hash as u32)
+        hashed(id, &fs::read(file).unwrap_or_default())
+    }
+
+    /// A weapon's cache key: a hash of only what its pulls and renders depend on, so changing
+    /// how it plays (its fire, its slot, its look in flight) renders nothing again.
+    pub fn weapon_key(&self, id: &str) -> String {
+        let text = fs::read_to_string(self.weapon_file(id)).unwrap_or_default();
+        let rendered = match text.parse::<toml::Table>() {
+            Ok(mut table) => {
+                table.retain(|key, _| RENDERED.iter().any(|kept| *kept == key));
+                if let Some(toml::Value::Table(ammo)) = table.get_mut("ammo") {
+                    ammo.retain(|key, _| key == "magazine");
+                }
+                if let Some(toml::Value::Table(wall)) = table.get_mut("wall") {
+                    wall.retain(|key, _| key == "chalk");
+                }
+                table.to_string()
+            }
+            Err(_) => text,
+        };
+        hashed(id, rendered.as_bytes())
+    }
+
+    /// The key a weapon's cache had before `weapon_key` (its whole file), to keep its renders.
+    pub fn legacy_weapon_key(&self, id: &str) -> String {
+        self.keyed(id, &self.weapon_file(id))
     }
 
     /// `Nacht_Thompson` for the weapon `thompson`.

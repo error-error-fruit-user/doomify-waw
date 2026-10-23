@@ -19,7 +19,8 @@ reserve = 12
 give = 12
 
 [fire]
-auto = false
+# Full Auto in World at War: holding the trigger keeps firing
+auto = true
 time = 1
 damage = 1
 speed = 60
@@ -56,3 +57,10 @@ hum = "tesla_idle"
 
 [view]
 ads_fov = 55
+
+# Doom's plasma, from the IWAD: the bolt's blue ball of lightning
+[projectile]
+sprite = "PLSS"
+frames = "AB"
+scale = 0.8
+burst = { sprite = "PLSE", frames = "ABCDE" }

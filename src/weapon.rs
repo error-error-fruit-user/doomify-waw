@@ -47,6 +47,9 @@ pub const SOUND_ROLES: &[&str] = &[
     "happy",
     "hum",
     "throw",
+    // the flamethrower: burning (looped while the trigger is held), and cooling down after
+    "loop",
+    "cooldown",
     "arm",
     "plant",
     "melee",
@@ -113,6 +116,45 @@ pub struct Ammo {
 
 fn yes() -> bool {
     true
+}
+
+/// How a projectile looks in flight and when it bursts, from sprites the map or the IWAD has
+/// (the Ray Gun's, from the map; Doom's rocket and plasma); without it a projectile is only its
+/// light and particles.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Look {
+    /// A sprite name (four letters or digits) and its frames in flight, two tics each.
+    pub sprite: String,
+    #[serde(default = "first_frame")]
+    pub frames: String,
+    #[serde(default = "one_f")]
+    pub scale: f64,
+    /// Grows and shrinks as it flies (the Ray Gun's).
+    #[serde(default)]
+    pub pulse: bool,
+    /// A ZScript translation that recolours it (Porter's X2 Ray Gun's red).
+    #[serde(default)]
+    pub translation: Option<String>,
+    /// The sprite and frames it bursts into, two tics each.
+    #[serde(default)]
+    pub burst: Option<Burst>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Burst {
+    pub sprite: String,
+    pub frames: String,
+    #[serde(default = "one_f")]
+    pub scale: f64,
+}
+
+fn first_frame() -> String {
+    "A".into()
+}
+fn one_f() -> f64 {
+    1.0
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -232,6 +274,9 @@ pub struct Weapon {
     pub sounds: BTreeMap<String, String>,
     #[serde(default)]
     pub view: View,
+    /// What it fires, when that is seen (projectiles and the Wunderwaffe).
+    #[serde(default)]
+    pub projectile: Option<Look>,
 }
 
 impl Weapon {
@@ -275,6 +320,25 @@ impl Weapon {
             ensure!((1..=9).contains(&self.slot), "slot must be 1 to 9");
         }
         ensure!(self.fire.time > 0.0, "fire.time must be positive");
+        if let Some(look) = &self.projectile {
+            ensure!(
+                matches!(self.kind, Kind::Projectile | Kind::Tesla),
+                "only projectiles and the Wunderwaffe have a [projectile] look"
+            );
+            let sprites = [(&look.sprite, &look.frames)]
+                .into_iter()
+                .chain(look.burst.as_ref().map(|b| (&b.sprite, &b.frames)));
+            for (sprite, frames) in sprites {
+                ensure!(
+                    sprite.len() == 4 && sprite.chars().all(|c| c.is_ascii_alphanumeric()),
+                    "a projectile's sprite must be four letters or digits, not {sprite:?}"
+                );
+                ensure!(
+                    !frames.is_empty() && frames.chars().all(|c| c.is_ascii_uppercase()),
+                    "a projectile's frames must be capital letters, not {frames:?}"
+                );
+            }
+        }
         for role in self.animations.keys() {
             ensure!(
                 ANIMATION_ROLES.contains(&role.as_str()),

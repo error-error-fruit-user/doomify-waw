@@ -37,6 +37,10 @@ ads_down = "viewmodel_flamethrower_ads_down"
 
 [sounds]
 dry = "player_out_of_ammo"
+# ignites, burns (looped) and cools down
+fire = "weap_flamethrower_start"
+loop = "weap_flamethrower_fireloop"
+cooldown = "weap_flamethrower_cooldown"
 raise = "weap_raise_plr"
 first_raise = "weap_flamethrower_foley_F"
 drop = "weap_putaway_plr"

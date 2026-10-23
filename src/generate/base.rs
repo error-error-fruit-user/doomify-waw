@@ -14,8 +14,23 @@ pub fn weapon(p: &str) -> String {
             int frameClock;         // how far Pace is through skipping frames
             bool raisedBefore;      // the first time it is raised it plays its first raise
             meta double aimZoom;    // the zoom when aimed (World at War's adsZoomFov)
+            // The flamethrower doesn't reload: its tank refills while it isn't burning, and
+            // emptied it overheats until full again
+            meta bool regenerates;
+            meta Sound burnSound;   // looped while it burns
+            meta Sound igniteSound;
+            meta Sound cooldownSound;
+            int lastBurned;
+            bool overheated;
 
             property AimZoom: aimZoom;
+            property Regenerates: regenerates;
+            property BurnSound: burnSound;
+            property IgniteSound: igniteSound;
+            property CooldownSound: cooldownSound;
+
+            const REFILL_DELAY = 12;    // tics after the last flame before the tank refills
+            const BURN_CHANNEL = CHAN_7;
 
             Default {{
                 {p}_DoomifyWeapon.AimZoom 1.2;
@@ -104,8 +119,40 @@ pub fn weapon(p: &str) -> String {
             // Fire, a stream of it: one flame, and a round every other tic
             action void ShootFlame(class<Actor> flame) {{
                 A_FireProjectile(flame, FRandom[Doomify](-3, 3), false, 4, -4, 0, FRandom[Doomify](-2, 2));
+                invoker.lastBurned = level.maptime;
                 if (self.player != null && (level.maptime & 1) == 0) {{
                     invoker.activeAmmo = max(0, invoker.activeAmmo - 1);
+                    if (invoker.activeAmmo == 0 && invoker.regenerates) {{
+                        invoker.overheated = true;
+                    }}
+                }}
+            }}
+
+            action State WhenOverheated(StateLabel label) {{
+                return invoker.When(invoker.overheated || invoker.activeAmmo <= 0, label);
+            }}
+
+            // The flamethrower's sound and tank: it roars while flames come out, and refills a
+            // round a tic once it has been quiet a moment
+            override void DoEffect() {{
+                super.DoEffect();
+                if (!self.regenerates || self.owner == null || self.owner.player == null) {{
+                    return;
+                }}
+                let burning = level.maptime - self.lastBurned <= 2 && self.owner.player.ReadyWeapon == self;
+                let roaring = self.owner.IsActorPlayingSound(BURN_CHANNEL);
+                if (burning && !roaring) {{
+                    self.owner.A_StartSound(self.igniteSound, CHAN_AUTO);
+                    self.owner.A_StartSound(self.burnSound, BURN_CHANNEL, CHANF_LOOPING);
+                }} else if (!burning && roaring) {{
+                    self.owner.A_StopSound(BURN_CHANNEL);
+                    self.owner.A_StartSound(self.cooldownSound, CHAN_AUTO);
+                }}
+                if (!burning && level.maptime - self.lastBurned > REFILL_DELAY && self.activeAmmo < self.Default.activeAmmo) {{
+                    ++self.activeAmmo;
+                    if (self.activeAmmo >= self.Default.activeAmmo) {{
+                        self.overheated = false;
+                    }}
                 }}
             }}
 
@@ -137,11 +184,16 @@ pub fn weapon(p: &str) -> String {
             meta int splash;            // explosion radius; 0 for none
             meta int splashDamage;
             meta Sound impactSound;
+            meta bool pulse;            // grows and shrinks as it flies (the Ray Gun's)
 
             property TrailColor: trailColor;
             property Splash: splash;
             property SplashDamage: splashDamage;
             property ImpactSound: impactSound;
+            property Pulse: pulse;
+
+            const PULSE_TICS = 10;      // tics growing, then as many shrinking
+            const PULSE_GROWTH = 1.2;   // each tic's
 
             Default {{
                 Projectile;
@@ -164,6 +216,11 @@ pub fn weapon(p: &str) -> String {
                 if (self.bDestroyed || self.bMissile == false) {{
                     return;
                 }}
+                if (self.pulse) {{
+                    let step = self.GetAge() % (2 * PULSE_TICS);
+                    let size = self.Default.scale.x * PULSE_GROWTH ** min(step, 2 * PULSE_TICS - step);
+                    self.scale = (size, size);
+                }}
                 for (let i = 0; i < 3; ++i) {{
                     self.A_SpawnParticle(self.trailColor, SPF_FULLBRIGHT | SPF_RELATIVE, 14, FRandom[Doomify](4, 8), 0,
                         FRandom[Doomify](-6, 0), FRandom[Doomify](-2, 2), FRandom[Doomify](-2, 2),
@@ -181,19 +238,22 @@ pub fn weapon(p: &str) -> String {
                 }}
             }}
 
+            // Where it lands: its sound, its blast, sparks and a flash
+            virtual void Impact() {{
+                self.A_StartSound(self.impactSound, CHAN_AUTO);
+                if (self.splash > 0) {{
+                    self.A_Explode(self.splashDamage, self.splash, 0, false, self.splash / 3, damagetype: 'Explosive');
+                }}
+                self.Burst(24);
+                self.A_AttachLight('DoomifyGlow', DynamicLight.PointLight, self.trailColor, 128, 0);
+            }}
+
             States {{
             Spawn:
                 TNT1 A -1;
                 Stop;
             Death:
-                TNT1 A 0 {{
-                    self.A_StartSound(self.impactSound, CHAN_AUTO);
-                    if (self.splash > 0) {{
-                        self.A_Explode(self.splashDamage, self.splash, 0, false, self.splash / 3, damagetype: 'Explosive');
-                    }}
-                    self.Burst(24);
-                    self.A_AttachLight('DoomifyGlow', DynamicLight.PointLight, self.trailColor, 128, 0);
-                }}
+                TNT1 A 0 Impact;
                 TNT1 A 6;
                 TNT1 A 6 A_RemoveLight('DoomifyGlow');
                 Stop;
@@ -236,21 +296,17 @@ pub fn weapon(p: &str) -> String {
                 +HITTRACER
             }}
 
-            States {{
-            Death:
-                TNT1 A 0 {{
-                    let arc = {p}_TeslaArc(Actor.Spawn('{p}_TeslaArc', self.pos));
-                    if (arc != null) {{
-                        arc.target = self.target;
-                        arc.next = self.tracer;
-                        arc.left = self.arcs;
-                        arc.range = self.arcRange;
-                        arc.trailColor = self.trailColor;
-                    }}
-                    self.A_StartSound(self.impactSound, CHAN_AUTO);
-                    self.Burst(32);
+            override void Impact() {{
+                let arc = {p}_TeslaArc(Actor.Spawn('{p}_TeslaArc', self.pos));
+                if (arc != null) {{
+                    arc.target = self.target;
+                    arc.next = self.tracer;
+                    arc.left = self.arcs;
+                    arc.range = self.arcRange;
+                    arc.trailColor = self.trailColor;
                 }}
-                Goto Super::Death + 1;
+                self.A_StartSound(self.impactSound, CHAN_AUTO);
+                self.Burst(32);
             }}
         }}
 
