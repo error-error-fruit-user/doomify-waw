@@ -535,15 +535,14 @@ fn gun_states(
                     .always("Goto Ready;")
             })
         })
-        // Empty: only a click; reloading is the reload key's
+        // Empty: only a click, no animation; reloading is the reload key's
         .always("Dry:")
         .indented(|code| {
-            code.when_some(built.sound_line("dry", "CHAN_WEAPON"), |c, l| c.always(l))
-                .always(format!(
-                    "{} 6;",
-                    built.still(&variant("idle", tesla.then_some(0)))
-                ))
-                .always("Goto Ready;")
+            code.when_some(
+                weapon.sounds.get("dry").filter(|a| built.pulled.sounds.contains_key(*a)),
+                |c, alias| c.always(format!("TNT1 A 0 DryClick(\"{}\");", sound(alias))),
+            )
+            .always("Goto Ready;")
         })
         .when(flame, |code| code.always("Reload:").indented(|code| code.always("Goto Ready;")))
         .otherwise(|code| code.append(reload_states(built)))

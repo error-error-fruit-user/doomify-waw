@@ -23,6 +23,7 @@ pub fn weapon(p: &str) -> String {
             int lastBurned;
             bool overheated;
             int joltTics;           // the Wunderwaffe jolting to life: the hands shake, the screen shocks
+            int nextClick;          // when an empty weapon may click again, the trigger held
 
             property AimZoom: aimZoom;
             property Regenerates: regenerates;
@@ -137,6 +138,14 @@ pub fn weapon(p: &str) -> String {
 
             // The flamethrower's sound and tank: it roars while flames come out, and refills a
             // round a tic once it has been quiet a moment
+            // An empty weapon's click, at most every few tics while the trigger is held
+            action void DryClick(Sound click) {{
+                if (level.maptime >= invoker.nextClick) {{
+                    invoker.nextClick = level.maptime + 8;
+                    A_StartSound(click, CHAN_WEAPON);
+                }}
+            }}
+
             // Its switch thrown, the Wunderwaffe comes back to life with a jolt that electrocutes
             // every zombie the player can see close by: the kills, and their points, are the player's
             action void Jolt() {{
