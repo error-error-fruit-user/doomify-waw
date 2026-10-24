@@ -25,6 +25,12 @@ pub fn files(
             weapon::file(project, weapon),
         );
     }
+    if let Some(player) = &project.config.player {
+        files.insert(
+            "zscript/doomify/player.zs".into(),
+            player_class(project, player),
+        );
+    }
     let includes: Vec<_> = files.keys().cloned().collect();
     files.insert(
         "ZSCRIPT.zs".into(),
@@ -49,6 +55,33 @@ pub fn files(
         "#},
     );
     files
+}
+
+/// `[player]`: `<prefix>_Player`, Doom's marine whose slots hold only World at War's weapons
+/// (they put themselves in slots, `Weapon.SlotNumber`; Doom's would be in the mystery box), starting
+/// with the weapons the map gives it.
+fn player_class(project: &Project, player: &crate::project::Player) -> String {
+    let p = &project.config.prefix;
+    Code::new()
+        .always("// The map's marine, from [player] in doomify.toml: Doom's, with World at War's start items.")
+        .block(format!("class {p}_Player : DoomPlayer"), |code| {
+            code.block("Default", |code| {
+                code.always(format!("Player.DisplayName \"{}\";", player.name.replace('"', "'")))
+                    .always("// Doom's slots, emptied: only World at War's weapons fill them")
+                    .each(&(1..=7).collect::<Vec<_>>(), |code, slot| {
+                        code.always(format!("Player.WeaponSlot {slot}, \"\";"))
+                    })
+                    .always("// a start item gets no ammo of its own (Weapon.AmmoGive is for pickups)")
+                    .each(&player.start, |code, item| {
+                        let class = project.class(&item.weapon);
+                        code.always(format!("Player.StartItem \"{class}\";"))
+                            .when(item.ammo > 0, |code| {
+                                code.always(format!("Player.StartItem \"{class}Ammo\", {};", item.ammo))
+                            })
+                    })
+            })
+        })
+        .build()
 }
 
 /// Every pulled alias as `waw/<alias>` (a `$random` of its variants), and the sound sets' names
@@ -97,6 +130,10 @@ fn mapinfo(project: &Project, built: &[Built]) -> String {
         .always("// The Wunderwaffe's shock on screen, and the wall drawings' editor numbers (doomify.toml)")
         .block("GameInfo", |code| {
             code.always(format!("AddEventHandlers = \"{p}_DoomifyShock\""))
+                // 🧍 the map's marine with World at War's start items, over Doom's (doomify.toml)
+                .when(project.config.player.is_some(), |code| {
+                    code.always(format!("PlayerClasses = \"{p}_Player\", \"DoomPlayer\""))
+                })
         })
         .when(!numbers.is_empty(), |code| {
             code.gap().block("DoomEdNums", |code| {

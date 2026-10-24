@@ -38,6 +38,34 @@ pub struct Config {
     /// The pk3 folders whose sprite names must not clash with the generated ones (the map's).
     #[serde(default)]
     pub sprites_of: Vec<PathBuf>,
+    /// The player class the pk3 brings, if any: Doom's marine with World at War's start items.
+    #[serde(default)]
+    pub player: Option<Player>,
+}
+
+/// `[player]` in `doomify.toml`: a `<prefix>_Player` the generated pk3 makes the player class, a
+/// `DoomPlayer` whose slots hold only World at War's weapons, starting with these.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Player {
+    /// The name in the player class menu.
+    #[serde(default = "player_name")]
+    pub name: String,
+    /// What it starts with: a weapon id and the rounds it brings.
+    #[serde(default)]
+    pub start: Vec<StartItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct StartItem {
+    pub weapon: String,
+    #[serde(default)]
+    pub ammo: u32,
+}
+
+fn player_name() -> String {
+    "Marine (World at War)".into()
 }
 
 fn weapons() -> PathBuf {
@@ -154,6 +182,13 @@ impl Project {
             if let Some(other) = numbers.insert(number, id) {
                 bail!("editor number {number} is given to both {other} and {id}");
             }
+        }
+        for item in config.player.iter().flat_map(|player| &player.start) {
+            ensure!(
+                weapons.contains_key(&item.weapon),
+                "[player] starts with {}, which has no weapon file",
+                item.weapon
+            );
         }
         let sound_sets = sounds::load_all(&root.join(&config.sounds))?;
         Ok(Self {
