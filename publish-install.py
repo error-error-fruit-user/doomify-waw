@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """Publish doomify-waw, then install the executable just published as the doomify-waw command.
 
-usage: python3 publish-install.py [--accept] [--no-build | --source] [--dir DIR]
+usage: python3 publish-install.py [--accept] [--no-build | --source] [--dir DIR] [--no-shortcuts]
 
 First it says, under a red warning, exactly what it will do, and asks before doing any of it
 (--accept goes ahead without asking). Then it builds the release with publish.py (doomify-waw for
 Windows and as an AppImage, into published/releases/), or with --source only doomify-waw for this
 machine (cargo build --release), or with --no-build nothing at all; and copies it to DIR as
 doomify-waw: by default ~/.local/bin, or %LOCALAPPDATA%\\Programs\\doomify-waw on Windows. With it
-on the PATH, a map's doomify.py uses it when there is no doomify-waw checkout beside the map.
+on the PATH, a map's doomify.py uses it when there is no doomify-waw checkout beside the map. Right
+after the warning it asks whether to make a shortcut (the app menu and the desktop, or the Start
+menu and the desktop on Windows) with the system's lock icon, which opens a terminal with its
+help; --no-shortcuts makes none without asking.
 
 Dependency-free Python 3.8+.
 """
@@ -112,6 +115,96 @@ def agreed(accept):
     return answer.lower() in ("y", "yes")
 
 
+
+# The system's lock icon for every shortcut: the icon theme's on Linux, shell32.dll's padlock on Windows
+LOCK_ICON = "system-lock-screen"
+WINDOWS_LOCK_ICON = r"%SystemRoot%\System32\shell32.dll,47"
+
+
+def shortcut_places():
+    """Where shortcuts go on Linux: the app menu, and the desktop if there is one."""
+    home = os.path.expanduser("~")
+    data = os.environ.get("XDG_DATA_HOME") or os.path.join(home, ".local", "share")
+    places = [os.path.join(data, "applications")]
+    try:
+        desktop = subprocess.run(["xdg-user-dir", "DESKTOP"], capture_output=True,
+                                 text=True).stdout.strip()
+    except OSError:
+        desktop = ""
+    desktop = desktop or os.path.join(home, "Desktop")
+    if os.path.isdir(desktop) and os.path.abspath(desktop) != os.path.abspath(home):
+        places.append(desktop)
+    return places
+
+
+def wants_shortcuts(args, what):
+    """Asks, right after the warning, whether to make shortcuts for `what` (--no-shortcuts: no,
+    without asking)."""
+    if args.no_shortcuts:
+        note("--no-shortcuts: no shortcuts, and no question about them")
+        return False
+    if not sys.stdin.isatty():
+        note("no one to ask about shortcuts: none are made")
+        return False
+    if WINDOWS:
+        where = "your Start menu and desktop"
+    else:
+        where = " and ".join(place.replace(os.path.expanduser("~"), "~", 1)
+                             for place in shortcut_places())
+    answer = input(f"Make shortcuts for {what} in {where}, with the system's lock icon? "
+                   "[y/N] ").strip()
+    note(f"asked about shortcuts for {what}, the answer was {answer!r}")
+    return answer.lower() in ("y", "yes")
+
+
+def exec_quoted(arg):
+    """`arg` as a desktop entry's Exec line wants it."""
+    if arg and not any(c in arg for c in " \t\n\"'\\><~|&;$*?#()`"):
+        return arg
+    return '"' + "".join("\\" + c if c in '"`$\\' else c for c in arg) + '"'
+
+
+def make_shortcut(title, file_id, command, comment):
+    """A shortcut called `title` that runs `command` in a terminal, with the lock icon: a desktop
+    entry `file_id`.desktop in each of `shortcut_places()` on Linux, a .lnk in the Start menu and on
+    the desktop on Windows."""
+    if WINDOWS:
+        def ps(text):
+            return "'" + text.replace("'", "''") + "'"
+        script = (
+            "$shell = New-Object -ComObject WScript.Shell\n"
+            "foreach ($folder in @([Environment]::GetFolderPath('Programs'), "
+            "[Environment]::GetFolderPath('Desktop'))) {\n"
+            f"  $link = $shell.CreateShortcut((Join-Path $folder {ps(title + '.lnk')}))\n"
+            f"  $link.TargetPath = {ps(command[0])}\n"
+            f"  $link.Arguments = {ps(subprocess.list2cmdline(command[1:]))}\n"
+            f"  $link.WorkingDirectory = {ps(os.path.dirname(os.path.abspath(command[0])))}\n"
+            f"  $link.Description = {ps(comment)}\n"
+            f"  $link.IconLocation = {ps(WINDOWS_LOCK_ICON)}\n"
+            "  $link.Save()\n"
+            "  Write-Output (Join-Path $folder " + ps(title + ".lnk") + ")\n"
+            "}\n")
+        run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script])
+        return
+    exec_line = " ".join(exec_quoted(arg) for arg in command)
+    entry = ("[Desktop Entry]\nType=Application\n"
+             f"Name={title}\nComment={comment}\n"
+             f"Exec={exec_line.replace(chr(92), chr(92) * 2).replace('%', '%%')}\n"
+             f"Icon={LOCK_ICON}\nTerminal=true\nCategories=Game;\n")
+    for place in shortcut_places():
+        os.makedirs(place, exist_ok=True)
+        path = os.path.join(place, file_id + ".desktop")
+        with open(path, "w", encoding="utf-8") as file:
+            file.write(entry)
+        os.chmod(path, 0o755)
+        # a desktop launches only the shortcuts it is told to trust
+        if not path.startswith(shortcut_places()[0]) and shutil.which("gio"):
+            subprocess.run(["gio", "set", path, "metadata::trusted", "true"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        note(f"made the shortcut {path}: {exec_line}")
+        print("Shortcut:", path)
+
+
 def plan(args):
     """What saying yes does, step by step."""
     target = os.path.join(args.dir, "doomify-waw" + EXE)
@@ -129,7 +222,8 @@ def plan(args):
     lines.append(f"  - copy it to {target}, replacing any doomify-waw there")
     lines.append("")
     lines.append("To change that: --no-build installs what is published already, --source builds only "
-                 "for this machine, and --dir says where it goes.")
+                 "for this machine, --dir says where it goes, and --no-shortcuts doesn't ask about "
+                 "shortcuts.")
     return lines
 
 
@@ -171,10 +265,13 @@ def main():
                            help="build doomify-waw for this machine only (cargo build --release)")
     parser.add_argument("--dir", default=default_dir(),
                         help="where to put doomify-waw (default: %(default)s)")
+    parser.add_argument("--no-shortcuts", action="store_true",
+                        help="make no shortcuts, and don't ask about them")
     args = parser.parse_args()
     note(f"=== {os.path.basename(__file__)} {' '.join(sys.argv[1:])} ===")
 
     warning(plan(args))
+    shortcuts = wants_shortcuts(args, "doomify-waw")
     if not agreed(args.accept):
         note("not going ahead: nothing was done")
         sys.exit("Nothing was done.")
@@ -191,6 +288,14 @@ def main():
     if found is None or os.path.abspath(found) != os.path.abspath(target):
         print(f"{args.dir} isn't first on your PATH for doomify-waw" +
               (f" ({found} is)" if found else "") + ": add it to use this one.")
+    if shortcuts:
+        # 📜 it works on a map's folder, so its shortcut opens a terminal with its help
+        if WINDOWS:
+            command = [os.environ.get("ComSpec", "cmd.exe"), "/k", target, "--help"]
+        else:
+            command = ["sh", "-c", f"'{target}' --help; echo; echo 'Press Enter to close.'; read _"]
+        make_shortcut("Doomify WaW", "doomify-waw", command,
+                      "Rebuilds World at War's weapons for UZDoom maps (shows its help)")
 
 
 if __name__ == "__main__":
