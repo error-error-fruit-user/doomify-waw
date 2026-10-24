@@ -83,7 +83,16 @@ pub fn run(command: &[String], work: &Path, job: &Path) -> Result<()> {
     fs::write(&scene, SCENE)?;
     fs::write(&script, SCRIPT)?;
     let (program, arguments) = command.split_first().context("No Blender command")?;
-    let status = Command::new(program)
+    // 🚿 Blender's own lines (Fra:, Saved:...) stream line by line into a pipe too, where stdbuf can
+    // tell it to (not into flatpak's sandbox)
+    let mut blender = if cfg!(target_os = "linux") && program != "flatpak" && which("stdbuf") {
+        let mut stdbuf = Command::new("stdbuf");
+        stdbuf.args(["-oL", "-eL"]).arg(program);
+        stdbuf
+    } else {
+        Command::new(program)
+    };
+    let status = blender
         .args(arguments)
         .arg("--background")
         .arg(&scene)
@@ -101,4 +110,10 @@ pub fn run(command: &[String], work: &Path, job: &Path) -> Result<()> {
         "Blender failed ({status}); its output above says why"
     );
     Ok(())
+}
+
+/// Whether `name` is a program on the PATH.
+fn which(name: &str) -> bool {
+    std::env::var_os("PATH")
+        .is_some_and(|path| std::env::split_paths(&path).any(|folder| folder.join(name).is_file()))
 }

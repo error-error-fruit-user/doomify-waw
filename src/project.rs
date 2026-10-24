@@ -226,7 +226,7 @@ impl Project {
         let text = fs::read_to_string(self.weapon_file(id)).unwrap_or_default();
         let rendered = match text.parse::<toml::Table>() {
             Ok(mut table) => {
-                table.retain(|key, _| RENDERED.iter().any(|kept| *kept == key));
+                table.retain(|key, _| RENDERED.contains(&key));
                 if let Some(toml::Value::Table(ammo)) = table.get_mut("ammo") {
                     ammo.retain(|key, _| key == "magazine");
                 }

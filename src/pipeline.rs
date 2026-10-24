@@ -59,7 +59,23 @@ pub fn build(project: &Project, options: &Options) -> Result<()> {
         }
     }
 
-    if !options.offline {
+    // 🗃️ everything pulled and rendered already (and nothing forced): no game, no Blender
+    let cached = !options.force
+        && ids.iter().all(|id| {
+            pull(&weapon_key(id)).join("pull.json").is_file()
+                && frames(&weapon_key(id)).join("rendered.json").is_file()
+        })
+        && project
+            .sound_sets
+            .keys()
+            .all(|id| pull(&sound_key(id)).join("pull.json").is_file());
+    if cached {
+        println!(
+            "Every weapon and sound set is pulled and rendered already, in {}: World at War and Blender aren't needed (--force does it again)",
+            work.display()
+        );
+    }
+    if !options.offline && !cached {
         let game = Game::find(options.pid, options.wait)?;
         game.require_weapons(
             ids.iter()
@@ -134,6 +150,10 @@ fn assemble(project: &Project, ids: &[String], work: &Path) -> Result<()> {
     )?;
 
     // Sounds: every alias once, whoever pulled it.
+    println!(
+        "Gathering the sounds into {}",
+        out.join("sounds/waw").display()
+    );
     let mut sounds: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut folders: Vec<PathBuf> = project
         .sound_sets
@@ -178,6 +198,11 @@ fn assemble(project: &Project, ids: &[String], work: &Path) -> Result<()> {
         }
         pulls.insert(folder.clone(), pulled);
     }
+
+    println!(
+        "Gathered {} sounds",
+        sounds.values().map(Vec::len).sum::<usize>()
+    );
 
     // Sprites and code, a weapon per core at a time.
     let one = |index: usize| -> Result<Built> {
@@ -236,7 +261,13 @@ fn assemble(project: &Project, ids: &[String], work: &Path) -> Result<()> {
         })
     };
     let cores = std::thread::available_parallelism().map_or(4, |n| n.get());
+    println!(
+        "Cutting the renders of {} weapons into sprites, {} at a time",
+        ids.len(),
+        cores.min(ids.len())
+    );
     let next = std::sync::atomic::AtomicUsize::new(0);
+    let cut = std::sync::atomic::AtomicUsize::new(0);
     let mut results: Vec<(usize, Result<Built>)> = std::thread::scope(|scope| {
         let workers: Vec<_> = (0..cores.min(ids.len()))
             .map(|_| {
@@ -247,7 +278,18 @@ fn assemble(project: &Project, ids: &[String], work: &Path) -> Result<()> {
                         if index >= ids.len() {
                             break;
                         }
-                        done.push((index, one(index)));
+                        let built = one(index);
+                        // 📣 each weapon said as it is done, so a long cut is seen going on
+                        let count = cut.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+                        if let Ok(built) = &built {
+                            let sprites: usize = built.frames.values().map(Vec::len).sum();
+                            println!(
+                                "Cut {} into {sprites} sprites ({count}/{})",
+                                ids[index],
+                                ids.len()
+                            );
+                        }
+                        done.push((index, built));
                     }
                     done
                 })
@@ -264,7 +306,9 @@ fn assemble(project: &Project, ids: &[String], work: &Path) -> Result<()> {
         .map(|(_, built)| built)
         .collect::<Result<Vec<_>>>()?;
 
-    for (path, text) in generate::files(project, &built, &sounds) {
+    let files = generate::files(project, &built, &sounds);
+    println!("Writing {} files of code and definitions", files.len());
+    for (path, text) in files {
         let target = out.join(&path);
         if let Some(parent) = target.parent() {
             fs::create_dir_all(parent)?;
@@ -274,6 +318,7 @@ fn assemble(project: &Project, ids: &[String], work: &Path) -> Result<()> {
     println!("Wrote {}", out.display());
     if let Some(pack) = &project.config.pack {
         let pack = project.path(pack);
+        println!("Packing {} into {}", out.display(), pack.display());
         zip_folder(&out, &pack)?;
         println!("Packed {}", pack.display());
     }

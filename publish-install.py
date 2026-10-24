@@ -214,10 +214,12 @@ def main():
     flags = parser()
     args = flags.parse_args()
     groans.start(JOURNAL, args.computer_speak)
+    if as_root():
+        groans.note("run as root: refused")
+        sys.exit("Don't run this with sudo: it installs for you, and root would leave files in "
+                 "published/ and an install that only root can change.")
     args = ask(flags, args, plan)
     check_owner([os.path.join(HERE, "published")])
-    groans.say("begin", "Publishing and installing doomify-waw", what="doomify-waw",
-               place=args.dir)
     build(args)
     groans.section("install")
     source = published()
