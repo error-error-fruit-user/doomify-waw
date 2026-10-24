@@ -20,11 +20,59 @@ import shutil
 import subprocess
 import sys
 import textwrap
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RELEASES = os.path.join(HERE, "published", "releases")
 WINDOWS = platform.system() == "Windows"
 EXE = ".exe" if WINDOWS else ""
+
+
+# The journal: everything this does, with the time since it began (what it plans and is told,
+# every command and all it prints, every file it puts somewhere), added to JOURNAL on each run.
+JOURNAL = os.path.join(HERE, "published", "publish-install.log")
+BEGAN = time.monotonic()
+# Blender's line for every frame it renders, which would bury the rest
+CHATTER = ("Fra:", "Saved:", "Time:", "Read blend")
+
+
+def note(line):
+    """Writes `line` down in the journal."""
+    os.makedirs(os.path.dirname(JOURNAL), exist_ok=True)
+    with open(JOURNAL, "a", encoding="utf-8") as journal:
+        for part in line.splitlines() or [""]:
+            journal.write(f"[{time.monotonic() - BEGAN:8.3f}s] {part}\n")
+
+
+def run(command, cwd=HERE):
+    """Runs `command`, its output shown as it comes (prompts included) and written down, with how it
+    ended. Raises CalledProcessError if it failed."""
+    shown = " ".join(str(part) for part in command)
+    print("+", shown, flush=True)
+    note(f"+ {shown}  (in {cwd})")
+    process = subprocess.Popen(command, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    pending, quiet = b"", 0
+    while True:
+        chunk = process.stdout.read1(4096)
+        if not chunk:
+            break
+        sys.stdout.buffer.write(chunk)
+        sys.stdout.buffer.flush()
+        *lines, pending = (pending + chunk).split(b"\n")
+        for line in lines:
+            text = line.decode(errors="replace").rstrip("\r")
+            if text.startswith(CHATTER):
+                quiet += 1
+            else:
+                note("  | " + text)
+    if pending:
+        note("  | " + pending.decode(errors="replace"))
+    code = process.wait()
+    if quiet:
+        note(f"  ({quiet} lines of Blender's frame by frame progress left out)")
+    note(f"  ended with code {code}")
+    if code:
+        raise subprocess.CalledProcessError(code, command)
 
 
 def default_dir():
@@ -33,10 +81,6 @@ def default_dir():
     return os.path.join(os.path.expanduser("~"), ".local", "bin")
 
 
-def run(command):
-    print("+", " ".join(command), flush=True)
-    subprocess.run(command, check=True, cwd=HERE)
-
 
 def warning(lines):
     """`lines` under a red '--- Warning ---' (plain where the output isn't a terminal)."""
@@ -44,6 +88,9 @@ def warning(lines):
         os.system("")  # lets the Windows console show colors
     color = sys.stdout.isatty() and "NO_COLOR" not in os.environ
     print("\033[31m--- Warning ---\033[0m" if color else "--- Warning ---")
+    note("--- Warning ---")
+    for line in lines:
+        note(line)
     width = min(shutil.get_terminal_size().columns, 100)
     for line in lines:
         # a step's later lines line up under its text
@@ -55,10 +102,14 @@ def warning(lines):
 
 def agreed(accept):
     if accept:
+        note("--accept: going ahead without asking")
         return True
     if not sys.stdin.isatty():
+        note("no one to ask, and no --accept: nothing was done")
         sys.exit("There is no one to ask, so nothing was done: pass --accept to go ahead.")
-    return input("Go ahead? [y/N] ").strip().lower() in ("y", "yes")
+    answer = input("Go ahead? [y/N] ").strip()
+    note(f"asked to go ahead, the answer was {answer!r}")
+    return answer.lower() in ("y", "yes")
 
 
 def plan(args):
@@ -90,6 +141,7 @@ def build(args):
         os.makedirs(RELEASES, exist_ok=True)
         shutil.copy2(os.path.join(HERE, "target", "release", "doomify-waw" + EXE),
                      os.path.join(RELEASES, "doomify-waw" + EXE))
+        note(f"copied the release build into {RELEASES}")
         return
     run([sys.executable, "publish.py"])
     # 🧹 a plain doomify-waw left by --source would be taken over the AppImage just built
@@ -120,9 +172,11 @@ def main():
     parser.add_argument("--dir", default=default_dir(),
                         help="where to put doomify-waw (default: %(default)s)")
     args = parser.parse_args()
+    note(f"=== {os.path.basename(__file__)} {' '.join(sys.argv[1:])} ===")
 
     warning(plan(args))
     if not agreed(args.accept):
+        note("not going ahead: nothing was done")
         sys.exit("Nothing was done.")
     build(args)
     source = published()
@@ -131,6 +185,7 @@ def main():
     # Copied beside it, then moved over it, so a running doomify-waw isn't overwritten in place
     shutil.copy2(source, target + ".part")
     os.replace(target + ".part", target)
+    note(f"copied {source} to {target}")
     print("Installed", target)
     found = shutil.which("doomify-waw")
     if found is None or os.path.abspath(found) != os.path.abspath(target):
@@ -141,5 +196,8 @@ def main():
 if __name__ == "__main__":
     try:
         main()
+        note("done")
     except subprocess.CalledProcessError as error:
-        sys.exit(f"publish-install failed: {error}")
+        note(f"failed: {error}")
+        sys.exit(f"publish-install failed: {error}\nWhat it did is in {JOURNAL}")
+    print(f"What it did is in {JOURNAL}")
