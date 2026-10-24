@@ -255,7 +255,19 @@ def published():
     sys.exit("There is no doomify-waw in published/releases/: build it (leave out --no-build).")
 
 
+def rust_on_path():
+    """Puts rustup's folder ($CARGO_HOME/bin, else ~/.cargo/bin) on the PATH when cargo isn't on
+    it, as a shell that never ran rustup's profile line leaves it; everything this runs inherits it."""
+    if shutil.which("cargo"):
+        return
+    home = os.environ.get("CARGO_HOME") or os.path.join(os.path.expanduser("~"), ".cargo")
+    folder = os.path.join(home, "bin")
+    if any(os.path.isfile(os.path.join(folder, name)) for name in ("cargo", "cargo.exe")):
+        os.environ["PATH"] = folder + os.pathsep + os.environ.get("PATH", "")
+
+
 def main():
+    rust_on_path()
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--accept", action="store_true", help="go ahead without asking")
     build_how = parser.add_mutually_exclusive_group()
