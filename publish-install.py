@@ -33,7 +33,7 @@ EXE = ".exe" if WINDOWS else ""
 
 # The journal: everything this does, with the time since it began (what it plans and is told,
 # every command and all it prints, every file it puts somewhere), added to JOURNAL on each run.
-JOURNAL = os.path.join(HERE, "published", "publish-install.log")
+JOURNAL = os.path.join(HERE, "published", "artifacts", "publish-install.log")
 BEGAN = time.monotonic()
 # Blender's line for every frame it renders, which would bury the rest
 CHATTER = ("Fra:", "Saved:", "Time:", "Read blend")
