@@ -147,7 +147,7 @@ def plan(args):
     lines.append("")
     lines.append("To change that, here or after the y: --no-build installs what is published already, "
                  "--source builds only for this machine, --dir says where it goes, "
-                 "--desktop-shortcut and --menu-entry make shortcuts, and --computer-speak speaks "
+                 "--desktop-shortcut and --menu-entry make shortcuts, --reinstall does it all again, and --computer-speak speaks "
                  "plainly.")
     return lines
 
@@ -156,6 +156,11 @@ def build(args):
     if args.no_build:
         return
     groans.section("build")
+    if not args.reinstall and not args.source and groans.up_to_date([os.path.join(RELEASES, "doomify-waw" + (".exe" if WINDOWS else ".AppImage"))], [HERE, os.path.join(os.path.dirname(HERE), "hell-hound")]):
+        groans.say("skip", "The release is newer than its sources: nothing to build "
+                   "(--reinstall builds it again)", what="doomify-waw's release", place=RELEASES)
+        return
+
     if args.source:
         groans.run(["cargo", "build", "--release"], cwd=HERE)
         os.makedirs(RELEASES, exist_ok=True)
@@ -196,6 +201,9 @@ def parser():
                        help="make a shortcut to doomify-waw on the desktop")
     flags.add_argument("--menu-entry", action="store_true",
                        help="make an entry for doomify-waw in the app menu (the Start menu on Windows)")
+    flags.add_argument("--reinstall", action="store_true",
+                       help="build and install everything again, where a run picks up where the last "
+                            "one left off")
     flags.add_argument("--computer-speak", action="store_true",
                        help="say what it does plainly and formally, rather than as a descent through hell")
     return flags
@@ -215,10 +223,13 @@ def main():
     source = published()
     target = os.path.join(args.dir, "doomify-waw" + EXE)
     os.makedirs(args.dir, exist_ok=True)
-    # Copied beside it, then moved over it, so a running doomify-waw isn't overwritten in place
-    shutil.copy2(source, target + ".part")
-    os.replace(target + ".part", target)
-    groans.say("copy", f"Installed {target}", what="doomify-waw", place=target)
+    if not args.reinstall and groans.same_file(source, target):
+        groans.say("skip", f"{target} is this doomify-waw already", what="doomify-waw", place=target)
+    else:
+        # Copied beside it, then moved over it, so a running doomify-waw isn't overwritten in place
+        shutil.copy2(source, target + ".part")
+        os.replace(target + ".part", target)
+        groans.say("copy", f"Installed {target}", what="doomify-waw", place=target)
     found = shutil.which("doomify-waw")
     if found is None or os.path.abspath(found) != os.path.abspath(target):
         groans.other(f"note: {args.dir} isn't first on your PATH for doomify-waw" +
