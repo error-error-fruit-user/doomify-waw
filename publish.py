@@ -21,6 +21,39 @@ import shutil
 import subprocess
 import sys
 
+GROANS_GITHUB = "https://raw.githubusercontent.com/error-error-fruit-user/installation-groans/main/"
+
+
+def load_groans():
+    """installation-groans' groans.py, which these scripts speak through: the project's
+    installation-groans submodule, else the workspace's checkout beside the project, else a copy
+    fetched from its GitHub into published/artifacts/groans/."""
+    project = os.path.dirname(os.path.abspath(__file__))
+    places = [os.path.join(project, "installation-groans"),
+              os.path.join(os.path.dirname(project), "installation-groans"),
+              os.path.join(project, "published", "artifacts", "groans")]
+    folder = next((place for place in places if os.path.isfile(os.path.join(place, "groans.py"))), None)
+    if folder is None:
+        folder = places[-1]
+        try:
+            import urllib.request
+            os.makedirs(folder, exist_ok=True)
+            for name in ("groans.py", "toiling-through-hell.toml", "computer-speak.toml"):
+                with urllib.request.urlopen(GROANS_GITHUB + name, timeout=10) as answer:
+                    with open(os.path.join(folder, name), "wb") as out:
+                        out.write(answer.read())
+        except Exception as error:
+            sys.exit(f"installation-groans isn't beside {os.path.basename(project)}, and couldn't be "
+                     f"fetched ({error}): clone it beside it.")
+    if folder not in sys.path:
+        sys.path.insert(0, folder)
+    import groans
+    return groans
+
+
+groans = load_groans()
+
+
 import appimage
 
 TARGET = "x86_64-pc-windows-gnu"
@@ -32,8 +65,11 @@ KEPT = "licenses"
 LICENSE_PREFIXES = ("LICENSE", "LICENCE", "COPYING", "UNLICENSE", "NOTICE")
 
 
-def cargo(*args, **kwargs):
-    return subprocess.run(["cargo", *args], check=True, **kwargs)
+def cargo(*args, capture=False):
+    """Runs cargo, in the voice; with `capture`, returns what it prints (its JSON)."""
+    if capture:
+        return groans.capture(["cargo", *args])
+    groans.run(["cargo", *args])
 
 
 def kept_license(name):
@@ -52,9 +88,9 @@ def third_party_licenses(target):
     cargo-license picks the crates (no build or dev dependencies, only those used by the target),
     cargo metadata says where each one's files are. Returns the crates that had no text."""
     licensed = cargo("license", "--json", "--avoid-build-deps", "--avoid-dev-deps",
-                     "--filter-platform", TARGET, stdout=subprocess.PIPE).stdout
+                     "--filter-platform", TARGET, capture=True)
     metadata = cargo("metadata", "--format-version", "1", "--filter-platform", TARGET,
-                     stdout=subprocess.PIPE).stdout
+                     capture=True)
     crates = [c for c in json.loads(licensed) if c["name"] not in PROGRAMS]
     manifests = {(p["name"], p["version"]): p["manifest_path"]
                  for p in json.loads(metadata)["packages"]}
@@ -113,7 +149,13 @@ def main():
     rust_on_path()
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--no-appimages", action="store_true", help="don't build the AppImages")
+    parser.add_argument("--computer-speak", action="store_true",
+                        help="say what it does plainly and formally, rather than as a descent "
+                             "through hell")
     options = parser.parse_args()
+    groans.start(None, options.computer_speak)
+    groans.say("begin", "Publishing doomify-waw", what="doomify-waw", place=os.path.join("published", "releases"))
+    groans.section("build")
 
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     if shutil.which("cargo-license") is None:
@@ -135,12 +177,21 @@ def main():
         sys.exit(error.returncode)
 
     if missing:
-        print("These crates ship no license file and have none in licenses/, so the release is "
-              "missing their text:", file=sys.stderr)
-        for crate in missing:
-            print("  " + crate, file=sys.stderr)
-        sys.exit(1)
+        sys.exit("These crates ship no license file and have none in licenses/, so the release is "
+                 "missing their text: " + ", ".join(missing))
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except subprocess.CalledProcessError as error:
+        groans.finish("doomify-waw", ok=False,
+                      error=f"{' '.join(map(str, error.cmd))} ended with code {error.returncode}")
+        sys.exit(1)
+    except SystemExit as stop:
+        # 🗣️ a reason to stop is said in the voice too
+        if isinstance(stop.code, str):
+            groans.say("problem", stop.code, problem=stop.code)
+            sys.exit(1)
+        raise
+    groans.finish("doomify-waw")
