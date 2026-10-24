@@ -143,9 +143,10 @@ fn assemble(project: &Project, ids: &[String], work: &Path) -> Result<()> {
                 .join(project.keyed(&format!("sounds-{id}"), &project.sound_file(id)))
         })
         .collect();
-    folders.extend(ids.iter().map(|id| {
-        work.join("pull").join(project.weapon_key(id))
-    }));
+    folders.extend(
+        ids.iter()
+            .map(|id| work.join("pull").join(project.weapon_key(id))),
+    );
     let mut pulls = BTreeMap::new();
     for folder in &folders {
         let pulled = Pulled::load(folder)?;

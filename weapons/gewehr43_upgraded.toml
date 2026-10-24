@@ -36,6 +36,8 @@ reload_empty = "viewmodel_g43_noscope_reload"
 raise = "viewmodel_g43_noscope_pullout"
 first_raise = "viewmodel_g43_noscope_first_raise"
 drop = "viewmodel_g43_noscope_putaway"
+empty_raise = "viewmodel_g43_noscope_empty_pullout"
+empty_drop = "viewmodel_g43_noscope_empty_putaway"
 ads_up = "viewmodel_g43_noscope_ads_up"
 ads_down = "viewmodel_g43_noscope_ads_down"
 

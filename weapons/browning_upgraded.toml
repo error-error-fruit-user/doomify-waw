@@ -36,6 +36,8 @@ reload_empty = "viewmodel_30cal_reload"
 raise = "viewmodel_30cal_pullout"
 first_raise = "viewmodel_30cal_first_raise"
 drop = "viewmodel_30cal_putaway"
+empty_raise = "viewmodel_30cal_pullout_empty"
+empty_drop = "viewmodel_30cal_putaway_empty"
 ads_up = "viewmodel_30cal_ads_up"
 ads_down = "viewmodel_30cal_ads_down"
 

@@ -71,7 +71,15 @@ pub struct Project {
 
 /// What in a weapon's TOML its pulls and renders depend on: what to pull, the clips and sounds,
 /// how it is drawn, its chalk and kind, and its magazine (the Wunderwaffe's bulbs).
-const RENDERED: &[&str] = &["kind", "game", "animations", "sounds", "view", "wall", "ammo"];
+const RENDERED: &[&str] = &[
+    "kind",
+    "game",
+    "animations",
+    "sounds",
+    "view",
+    "wall",
+    "ammo",
+];
 
 /// `id` and an FNV-1a hash of `content`, the scene and the render version: stable across runs
 /// and platforms, which std's hasher is not.

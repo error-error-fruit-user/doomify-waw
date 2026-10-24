@@ -37,6 +37,8 @@ reload_empty = "viewmodel_m1garand_reload"
 raise = "viewmodel_m1garand_pullout"
 first_raise = "viewmodel_m1garand_first_pullout"
 drop = "viewmodel_m1garand_putaway"
+empty_raise = "viewmodel_m1garand_pullout_empty"
+empty_drop = "viewmodel_m1garand_putaway_empty"
 ads_up = "viewmodel_m1garand_ads_up"
 ads_down = "viewmodel_m1garand_ads_down"
 

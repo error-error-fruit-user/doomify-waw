@@ -38,6 +38,8 @@ reload = "viewmodel_m1garand_grenade_reload"
 raise = "viewmodel_m1garand_grenade_pullout"
 first_raise = "viewmodel_m1garand_grenade_first_pullout"
 drop = "viewmodel_m1garand_grenade_putaway"
+empty_raise = "viewmodel_m1garand_grenade_pullout_empty"
+empty_drop = "viewmodel_m1garand_grenade_putaway_empty"
 ads_up = "viewmodel_m1garand_grenade_ads_up"
 ads_down = "viewmodel_m1garand_grenade_ads_down"
 

@@ -38,6 +38,8 @@ reload = "viewmodel_colt45_reload_notempty"
 raise = "viewmodel_colt45_pullout"
 first_raise = "viewmodel_colt45_pullout"
 drop = "viewmodel_colt45_putaway"
+empty_raise = "viewmodel_colt45_pullout_empty"
+empty_drop = "viewmodel_colt45_putaway_empty"
 ads_up = "viewmodel_colt45_ads_up"
 ads_down = "viewmodel_colt45_ads_down"
 

@@ -24,6 +24,9 @@ pub const ANIMATION_ROLES: &[&str] = &[
     "raise",
     "first_raise",
     "drop",
+    // with the magazine empty (the bolt locked back)
+    "empty_raise",
+    "empty_drop",
     "ads_up",
     "ads_down",
 ];
@@ -230,8 +233,8 @@ pub struct View {
     /// swing) to hold it at while it is up; the frame showing most of it when unset.
     #[serde(default)]
     pub hold_frame: Option<usize>,
-    /// The Wunderwaffe: the reload's notetrack where its switch turns the bulbs back on; before
-    /// it they are dark, at it the gun jolts to life.
+    /// The Wunderwaffe: the notetrack of its reload and first raise where its switch turns the
+    /// bulbs on; before it they are dark, at it the gun jolts to life.
     #[serde(default)]
     pub lights_on: Option<String>,
 }

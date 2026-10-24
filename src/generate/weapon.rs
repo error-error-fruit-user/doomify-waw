@@ -150,9 +150,14 @@ impl Built<'_> {
             .map(|(_, time)| (*time as f64 * 35.0).round() as usize)
     }
 
-    /// A reload's frames and sounds; the Wunderwaffe's are dark until its switch turns the bulbs
-    /// on (`view.lights_on`), where it jolts to life (`Jolt`), and lit from there.
-    fn reload_frames(&self, role: &str, render: &str) -> (Vec<Frame>, BTreeMap<usize, Vec<String>>) {
+    /// A reload's (or first raise's) frames and sounds; the Wunderwaffe's are dark until its
+    /// switch turns the bulbs on (`view.lights_on`), where it jolts to life (`Jolt`), and lit
+    /// from there.
+    fn switched_frames(
+        &self,
+        role: &str,
+        render: &str,
+    ) -> (Vec<Frame>, BTreeMap<usize, Vec<String>>) {
         let lit = self.get(render);
         let mut events = self.events(role, lit.len());
         let dark = variant(role, Some(0));
@@ -350,6 +355,9 @@ fn states(project: &Project, built: &Built) -> Code {
                 .when(built.has(&variant("first_raise", full)), |code| {
                     code.always("TNT1 A 0 WhenFirstRaise(\"FirstRaise\");")
                 })
+                .when(built.has("empty_raise"), |code| {
+                    code.always("TNT1 A 0 WhenNoActiveAmmo(\"EmptyRaise\");")
+                })
                 .when(tesla, |code| dispatch(code, "Raise"))
                 .otherwise(|code| code.always("Goto Raise;"))
         })
@@ -368,21 +376,28 @@ fn states(project: &Project, built: &Built) -> Code {
                 })
         })
         .when(built.has(&variant("first_raise", full)), |code| {
+            let (shown, events) =
+                built.switched_frames("first_raise", &variant("first_raise", full));
             code.always("FirstRaise:").indented(|code| {
                 code.when_some(built.sound_line("first_raise", "CHAN_WEAPON"), |c, l| {
                     c.always(l)
                 })
-                .append(frames(
-                    Code::new(),
-                    built.get(&variant("first_raise", full)),
-                    Tic::Plain,
-                    &built.events(
-                        "first_raise",
-                        built.get(&variant("first_raise", full)).len(),
-                    ),
-                ))
+                .append(frames(Code::new(), &shown, Tic::Plain, &events))
                 .always("TNT1 A 0 A_Raise(256);")
                 .always("Wait;")
+            })
+        })
+        .when(built.has("empty_raise"), |code| {
+            code.always("EmptyRaise:").indented(|code| {
+                code.when_some(built.sound_line("raise", "CHAN_WEAPON"), |c, l| c.always(l))
+                    .append(frames(
+                        Code::new(),
+                        built.get("empty_raise"),
+                        Tic::Plain,
+                        &built.events("empty_raise", built.get("empty_raise").len()),
+                    ))
+                    .always("TNT1 A 0 A_Raise(256);")
+                    .always("Wait;")
             })
         })
         // Ready: aimed, empty, or (the Wunderwaffe) by its rounds
@@ -423,8 +438,24 @@ fn states(project: &Project, built: &Built) -> Code {
         .indented(|code| {
             code.when(aims, |code| code.always("TNT1 A 0 ZoomOut;"))
                 .always("TNT1 A 0 AtRest;")
+                .when(built.has("empty_drop"), |code| {
+                    code.always("TNT1 A 0 WhenNoActiveAmmo(\"EmptyLower\");")
+                })
                 .when(tesla, |code| dispatch(code, "Lower"))
                 .otherwise(|code| code.always("Goto Lower;"))
+        })
+        .when(built.has("empty_drop"), |code| {
+            code.always("EmptyLower:").indented(|code| {
+                code.when_some(built.sound_line("drop", "CHAN_WEAPON"), |c, l| c.always(l))
+                    .append(frames(
+                        Code::new(),
+                        built.get("empty_drop"),
+                        Tic::Plain,
+                        &BTreeMap::new(),
+                    ))
+                    .always("TNT1 A 0 A_Lower(256);")
+                    .always("Wait;")
+            })
         })
         .each(&counts, |code, lit| {
             code.always(format!("{}:", label("Lower", *lit)))
@@ -467,40 +498,42 @@ fn gun_states(
     let has_ads_last = built.has("ads_last_fire");
     code.always("Fire:")
         .indented(|code| {
-            code.when(flame, |code| code.always("TNT1 A 0 WhenOverheated(\"Dry\");"))
-                .otherwise(|code| code.always("TNT1 A 0 WhenNoActiveAmmo(\"Dry\");"))
-                .when(aims, |code| {
-                    code.always("TNT1 A 0 WhenZoomed(\"ZoomFireNext\");")
+            code.when(flame, |code| {
+                code.always("TNT1 A 0 WhenOverheated(\"Dry\");")
+            })
+            .otherwise(|code| code.always("TNT1 A 0 WhenNoActiveAmmo(\"Dry\");"))
+            .when(aims, |code| {
+                code.always("TNT1 A 0 WhenZoomed(\"ZoomFireNext\");")
+            })
+            .when(has_last, |code| {
+                code.always("TNT1 A 0 WhenLastActiveAmmo(\"LastFire\");")
+            })
+            .when(tesla, |code| {
+                code.each(1..=weapon.ammo.magazine, |code, rounds| {
+                    code.always(format!(
+                        "TNT1 A 0 WhenActiveAmmo({rounds}, \"{}\");",
+                        fire_label(false, Some(plan::lit(weapon, rounds - 1)))
+                    ))
                 })
-                .when(has_last, |code| {
-                    code.always("TNT1 A 0 WhenLastActiveAmmo(\"LastFire\");")
-                })
-                .when(tesla, |code| {
-                    code.each(1..=weapon.ammo.magazine, |code, rounds| {
-                        code.always(format!(
-                            "TNT1 A 0 WhenActiveAmmo({rounds}, \"{}\");",
-                            fire_label(false, Some(plan::lit(weapon, rounds - 1)))
-                        ))
-                    })
-                })
-                .when(!tesla, |code| code.always("Goto FireShot;"))
+            })
+            .when(!tesla, |code| code.always("Goto FireShot;"))
         })
         .when(flame, |code| {
             // The flamethrower burns for as long as the trigger is held
             // (it roars and cools down by itself: DoEffect)
             code.always("FireShot:").indented(|code| {
                 code.each(
-                        built.get("fire").iter().take(built.cycle().max(4)),
-                        |code, frame| {
-                            let (sprite, letter) = frame.state();
-                            code.always(format!(
-                                "{sprite} {letter} 1 ShootFlame(\"{}Shot\");",
-                                project.class(built.id)
-                            ))
-                        },
-                    )
-                    .always("TNT1 A 0 A_ReFire;")
-                    .always("Goto Ready;")
+                    built.get("fire").iter().take(built.cycle().max(4)),
+                    |code, frame| {
+                        let (sprite, letter) = frame.state();
+                        code.always(format!(
+                            "{sprite} {letter} 1 ShootFlame(\"{}Shot\");",
+                            project.class(built.id)
+                        ))
+                    },
+                )
+                .always("TNT1 A 0 A_ReFire;")
+                .always("Goto Ready;")
             })
         })
         .otherwise_when(tesla, |code| {
@@ -539,12 +572,18 @@ fn gun_states(
         .always("Dry:")
         .indented(|code| {
             code.when_some(
-                weapon.sounds.get("dry").filter(|a| built.pulled.sounds.contains_key(*a)),
+                weapon
+                    .sounds
+                    .get("dry")
+                    .filter(|a| built.pulled.sounds.contains_key(*a)),
                 |c, alias| c.always(format!("TNT1 A 0 DryClick(\"{}\");", sound(alias))),
             )
             .always("Goto Ready;")
         })
-        .when(flame, |code| code.always("Reload:").indented(|code| code.always("Goto Ready;")))
+        .when(flame, |code| {
+            code.always("Reload:")
+                .indented(|code| code.always("Goto Ready;"))
+        })
         .otherwise(|code| code.append(reload_states(built)))
         .when(aims, |code| {
             aim_states(
@@ -623,18 +662,18 @@ fn reload_states(built: &Built) -> Code {
             })
         })
         .otherwise(|code| {
-            let (shown, events) = built.reload_frames("reload", &reload);
+            let (shown, events) = built.switched_frames("reload", &reload);
             code.indented(|code| {
                 code.append(frames(Code::new(), &shown, Tic::Reload, &events))
                     .always("TNT1 A 0 Reload;")
                     .always("Goto Ready;")
             })
             .when(built.has(&reload_empty), |code| {
-                let (shown, events) = built.reload_frames("reload_empty", &reload_empty);
+                let (shown, events) = built.switched_frames("reload_empty", &reload_empty);
                 code.always("ReloadEmpty:").indented(|code| {
                     code.append(frames(Code::new(), &shown, Tic::Reload, &events))
-                    .always("TNT1 A 0 Reload;")
-                    .always("Goto Ready;")
+                        .always("TNT1 A 0 Reload;")
+                        .always("Goto Ready;")
                 })
             })
         })
@@ -1082,7 +1121,9 @@ fn look(project: &Project, weapon: &Weapon) -> (String, String) {
     let p = &project.config.prefix;
     let defaults = Code::new()
         .always(format!("Scale {:.3};", look.scale))
-        .when(look.pulse, |code| code.always(format!("{p}_DoomifyShot.Pulse true;")))
+        .when(look.pulse, |code| {
+            code.always(format!("{p}_DoomifyShot.Pulse true;"))
+        })
         .when_some(look.translation.as_ref(), |code, translation| {
             code.always(format!("Translation \"{translation}\";"))
         })
@@ -1106,9 +1147,14 @@ fn look(project: &Project, weapon: &Weapon) -> (String, String) {
         .build();
     // each line after the one before it, at the class's indentation
     let lines = |text: String, indent: &str| -> String {
-        text.lines().map(|line| format!("\n{indent}{line}")).collect()
+        text.lines()
+            .map(|line| format!("\n{indent}{line}"))
+            .collect()
     };
-    (lines(defaults, "        "), format!("\n{}", lines(states, "    ")))
+    (
+        lines(defaults, "        "),
+        format!("\n{}", lines(states, "    ")),
+    )
 }
 
 fn shot_class(project: &Project, built: &Built) -> Code {
@@ -1291,9 +1337,18 @@ pub fn file(project: &Project, built: &Built) -> String {
                     .unwrap_or_default()
             };
             code.always(format!("{p}_DoomifyWeapon.Regenerates true;"))
-                .always(format!("{p}_DoomifyWeapon.BurnSound \"{}\";", named("loop")))
-                .always(format!("{p}_DoomifyWeapon.IgniteSound \"{}\";", named("fire")))
-                .always(format!("{p}_DoomifyWeapon.CooldownSound \"{}\";", named("cooldown")))
+                .always(format!(
+                    "{p}_DoomifyWeapon.BurnSound \"{}\";",
+                    named("loop")
+                ))
+                .always(format!(
+                    "{p}_DoomifyWeapon.IgniteSound \"{}\";",
+                    named("fire")
+                ))
+                .always(format!(
+                    "{p}_DoomifyWeapon.CooldownSound \"{}\";",
+                    named("cooldown")
+                ))
         })
         .when(weapon.fire.auto, |code| code.always("-WEAPON.NOAUTOFIRE"))
         .when(thrown, |code| code.always("+WEAPON.NOAUTOAIM"));

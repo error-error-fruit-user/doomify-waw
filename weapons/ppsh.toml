@@ -38,6 +38,8 @@ reload_empty = "viewmodel_ppsh_reload"
 raise = "viewmodel_ppsh_pullout"
 first_raise = "viewmodel_ppsh_pullout"
 drop = "viewmodel_ppsh_putaway"
+empty_raise = "viewmodel_ppsh_pullout_empty"
+empty_drop = "viewmodel_ppsh_putaway_empty"
 ads_up = "viewmodel_ppsh_ads_up"
 ads_down = "viewmodel_ppsh_ads_down"
 

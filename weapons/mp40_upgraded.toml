@@ -36,6 +36,8 @@ reload_empty = "viewmodel_mp40_reload_empty"
 raise = "viewmodel_mp40_pullout"
 first_raise = "viewmodel_mp40_first_raise"
 drop = "viewmodel_mp40_putaway"
+empty_raise = "viewmodel_mp40_pullout_empty"
+empty_drop = "viewmodel_mp40_putaway_empty"
 ads_up = "viewmodel_mp40_ads_up_pc"
 ads_down = "viewmodel_mp40_ads_down_pc"
 

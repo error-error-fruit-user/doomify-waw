@@ -163,7 +163,8 @@ pub fn renders(weapon: &Weapon) -> Vec<Render> {
         add("zoom_in", clip("idle"), Stance::ZoomIn, false, all);
         add("zoom_out", clip("idle"), Stance::ZoomOut, false, all);
     }
-    // a Wunderwaffe that switches its bulbs off to reload is rendered both lit and dark
+    // a Wunderwaffe that switches its bulbs off to reload (and on as it first comes up) is
+    // rendered both lit and dark
     let mut reload_lit = full.to_vec();
     if weapon.kind == Kind::Tesla && weapon.view.lights_on.is_some() {
         reload_lit.push(Some(0));
@@ -198,9 +199,23 @@ pub fn renders(weapon: &Weapon) -> Vec<Render> {
         distinct("first_raise", "raise"),
         Stance::Hip,
         false,
-        full,
+        &reload_lit,
     );
     add("drop", clip("drop"), Stance::Hip, knife, all);
+    add(
+        "empty_raise",
+        distinct("empty_raise", "raise"),
+        Stance::Hip,
+        false,
+        &[None],
+    );
+    add(
+        "empty_drop",
+        distinct("empty_drop", "drop"),
+        Stance::Hip,
+        false,
+        &[None],
+    );
     renders
 }
 

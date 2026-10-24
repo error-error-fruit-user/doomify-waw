@@ -56,7 +56,8 @@ happy = "tesla_happy"
 hum = "tesla_idle"
 
 [view]
-# the reload switches the bulbs off; flipped back on, the gun jolts to life
+# the bulbs are dark until the switch is flipped on (in the reload and the first raise), where
+# the gun jolts to life
 lights_on = "tesla_switch_flip_on"
 ads_fov = 55
 
