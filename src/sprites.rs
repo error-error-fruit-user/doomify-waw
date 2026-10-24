@@ -1,8 +1,9 @@
 //! Rendered frames into Doom sprites: named, offset with grAb chunks and cropped with putpng.
 //!
-//! A weapon's sprites are named `<code><role><page>`: its two-character code, a character per
-//! render (fire, reload...) and a page of 26 frames, the frame being the letter after it. Frames
-//! with nothing in them are left out and drawn as TNT1.
+//! A weapon's sprites are named `<code><page>`: its two-character code and two characters
+//! numbering a page of 26 frames, the frame being the letter after it. Every render (fire,
+//! reload...) starts a page of its own. Frames with nothing in them are left out and drawn as
+//! TNT1.
 
 use anyhow::{Context, Result, anyhow, ensure};
 use image::{GenericImageView, RgbaImage, imageops};
@@ -42,7 +43,9 @@ impl Frame {
     }
 }
 
-const ROLES: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+/// A weapon's sprite names are its code and a page of 26 frames, in two characters: the first
+/// from `ROWS`, the second from `PAGES`, so 1296 pages in all. Every render starts a page.
+const ROWS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 const PAGES: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 /// The canvas's top left on Doom's 320x200 weapon screen (see weapon.blend): 80 pixels left of
 /// it, and the weapon's resting height (WEAPONTOP) above.
@@ -57,7 +60,8 @@ pub struct Sprites {
     crc: Crc32,
     folder: PathBuf,
     code: String,
-    roles: usize,
+    /// The pages used so far.
+    pages: usize,
 }
 
 fn putpng(result: std::result::Result<(), Box<dyn std::error::Error>>, path: &Path) -> Result<()> {
@@ -110,16 +114,18 @@ impl Sprites {
             crc: Crc32::new(),
             folder,
             code: code.to_uppercase(),
-            roles: 0,
+            pages: 0,
         })
     }
 
-    fn next_role(&mut self) -> Result<char> {
-        let role = *ROLES
-            .get(self.roles)
-            .context("A weapon has more than 36 renders; give it fewer variants")?;
-        self.roles += 1;
-        Ok(role as char)
+    /// The sprite name of the next page.
+    fn next_page(&mut self) -> Result<String> {
+        let row = *ROWS
+            .get(self.pages / PAGES.len())
+            .context("A weapon has more than 1296 pages of 26 frames; give it fewer variants")?;
+        let page = PAGES[self.pages % PAGES.len()];
+        self.pages += 1;
+        Ok(format!("{}{}{}", self.code, row as char, page as char))
     }
 
     /// Writes `image` as the sprite `name` frame `letter`, offset by `offset` before cropping.
@@ -187,7 +193,7 @@ impl Sprites {
 
     /// The frames of one render (`folder` holds `0000.png`...; `count` of them) as a sequence.
     pub fn sequence(&mut self, folder: &Path, count: usize) -> Result<Vec<Frame>> {
-        let role = self.next_role()?;
+        let mut names = vec![];
         let mut frames = vec![];
         for index in 0..count {
             let path = folder.join(format!("{index:04}.png"));
@@ -199,10 +205,10 @@ impl Sprites {
                 frames.push(Frame::Empty);
                 continue;
             }
-            let page = *PAGES
-                .get(index / 26)
-                .context("A render has more than 936 frames")? as char;
-            let name = format!("{}{role}{page}", self.code);
+            while names.len() <= index / 26 {
+                names.push(self.next_page()?);
+            }
+            let name = names[index / 26].clone();
             let letter = (b'A' + (index % 26) as u8) as char;
             self.write(&image, &name, letter, WEAPON_OFFSET)?;
             let area = image.pixels().filter(|p| p.0[3] != 0).count();
@@ -221,8 +227,7 @@ impl Sprites {
             "{} is empty",
             path.display()
         );
-        let role = self.next_role()?;
-        let name = format!("{}{role}0", self.code);
+        let name = self.next_page()?;
         let (width, height) = image.dimensions();
         self.write(&image, &name, 'A', (width as i32 / 2, height as i32))?;
         let area = (width * height) as usize;
@@ -244,8 +249,7 @@ impl Sprites {
             (height * CHALK_WIDTH / width).max(1),
             imageops::FilterType::Lanczos3,
         );
-        let role = self.next_role()?;
-        let name = format!("{}{role}0", self.code);
+        let name = self.next_page()?;
         let (width, height) = scaled.dimensions();
         self.write(&scaled, &name, 'A', (width as i32 / 2, height as i32 / 2))?;
         let area = (width * height) as usize;
@@ -301,5 +305,18 @@ mod tests {
         despeckle(&mut image);
         assert_eq!(image.get_pixel(17, 1).0[3], 0);
         assert_eq!(image.get_pixel(5, 5).0[3], 255);
+    }
+
+    #[test]
+    fn pages_go_past_36_renders() {
+        let folder = std::env::temp_dir().join(format!("doomify-pages-{}", std::process::id()));
+        let mut sprites = Sprites::new("ww", folder.clone()).unwrap();
+        let names: Vec<_> = (0..40).map(|_| sprites.next_page().unwrap()).collect();
+        assert_eq!(names[0], "WWA0");
+        assert_eq!(names[35], "WWAZ");
+        assert_eq!(names[36], "WWB0");
+        sprites.pages = ROWS.len() * PAGES.len();
+        assert!(sprites.next_page().is_err());
+        fs::remove_dir_all(folder).ok();
     }
 }
