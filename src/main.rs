@@ -52,6 +52,10 @@ enum Command {
         #[arg(long)]
         offline: bool,
     },
+    /// Print the versions of what it builds, one to a line: the render script's parts (their
+    /// version and the weapon kinds they draw) and the assembly. Installers build their weapons
+    /// again when these change.
+    Versions,
     /// Write a doomify.toml and the default Der Riese weapons and sound sets into a folder.
     Init {
         folder: PathBuf,
@@ -135,6 +139,18 @@ fn run() -> Result<()> {
                     offline,
                 },
             )
+        }
+        Command::Versions => {
+            for part in doomify_waw::blender::render_parts() {
+                let kinds = if part.kinds.is_empty() {
+                    "*".to_string()
+                } else {
+                    part.kinds.join(" ")
+                };
+                println!("render {}: {} {kinds}", part.name, part.version);
+            }
+            println!("assembly: {}", pipeline::ASSEMBLY_VERSION);
+            Ok(())
         }
         Command::Init {
             folder,

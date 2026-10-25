@@ -39,6 +39,14 @@ PIXEL_ASPECT = 1.2
 # Where the lights in weapon.blend aim; the world model is moved there for its picture.
 GUN = (0.45, -0.08, -0.12)
 
+# The versions of this script's parts, which doomify-waw reads (one part to a line): raise a
+# part's when a change to it changes the frames it draws, so only the weapons of its kinds ("*"
+# for every weapon) are rendered again, and installs build their weapons again.
+RENDER_VERSIONS = {
+    "views": (2, "*"),  # the scene, the views and the world model's picture
+    "bottle glass": (2, "drink"),  # see_through: a perk bottle's glass shows its drink
+}
+
 
 def say(*text):
     print("doomify:", *text, flush=True)

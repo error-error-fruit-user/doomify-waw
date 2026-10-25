@@ -18,6 +18,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
+/// The version of what is built from the renders (the renders each weapon plans, its sprites
+/// and code, the sounds): raise it when a change to doomify-waw changes the pk3 it builds, so
+/// installers build their weapons again (`doomify-waw versions`). The render script's parts have
+/// their own, in its `RENDER_VERSIONS`.
+pub const ASSEMBLY_VERSION: u32 = 1;
+
 #[derive(Default)]
 pub struct Options {
     pub blender: Option<PathBuf>,

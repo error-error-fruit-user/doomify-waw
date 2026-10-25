@@ -10,11 +10,62 @@ use std::{
 
 /// The scene every weapon is rendered in (rebuilt with `blender/make_blend.py`).
 pub const SCENE: &[u8] = include_bytes!("../blender/weapon.blend");
-/// What the scene and script render: raise it when a change to either changes the frames, so
-/// cached renders are made again (other changes to the script keep them).
-pub const RENDER_VERSION: &str = "2";
 /// The script that pulls with `--script` and renders.
 pub const SCRIPT: &str = include_str!("../blender/render.py");
+
+/// A part of the render script and its version, from its `RENDER_VERSIONS`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RenderPart {
+    pub name: String,
+    pub version: u32,
+    /// The weapon kinds it draws; empty for every weapon ("*").
+    pub kinds: Vec<String>,
+}
+
+/// The parts of the render script and their versions, as its `RENDER_VERSIONS` gives them
+/// (`"name": (version, "kinds"),`, one to a line).
+pub fn render_parts() -> Vec<RenderPart> {
+    parts_of(SCRIPT)
+}
+
+fn parts_of(script: &str) -> Vec<RenderPart> {
+    let Some(start) = script.find("RENDER_VERSIONS = {") else {
+        return Vec::new();
+    };
+    script[start..]
+        .lines()
+        .skip(1)
+        .take_while(|line| !line.trim_start().starts_with('}'))
+        .filter_map(|line| {
+            let line = line.split('#').next()?.trim();
+            let (name, rest) = line.strip_prefix('"')?.split_once("\": (")?;
+            let (version, kinds) = rest.split_once(',')?;
+            let kinds = kinds.trim().strip_prefix('"')?.split('"').next()?;
+            Some(RenderPart {
+                name: name.to_string(),
+                version: version.trim().parse().ok()?,
+                kinds: match kinds {
+                    "*" => Vec::new(),
+                    kinds => kinds.split_whitespace().map(str::to_string).collect(),
+                },
+            })
+        })
+        .collect()
+}
+
+/// The versions of the parts that draw `kind` (every weapon's when `None`), joined with dots:
+/// part of a render's cache key.
+pub fn render_version(kind: Option<&str>) -> String {
+    render_parts()
+        .iter()
+        .filter(|part| match kind {
+            None => part.kinds.is_empty(),
+            Some(kind) => part.kinds.iter().any(|k| k == kind),
+        })
+        .map(|part| part.version.to_string())
+        .collect::<Vec<_>>()
+        .join(".")
+}
 
 /// The Blender to run: `explicit`, else $BLENDER, else `blender` on the PATH, else the usual
 /// install places.
@@ -116,4 +167,31 @@ pub fn run(command: &[String], work: &Path, job: &Path) -> Result<()> {
 fn which(name: &str) -> bool {
     std::env::var_os("PATH")
         .is_some_and(|path| std::env::split_paths(&path).any(|folder| folder.join(name).is_file()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_render_script_gives_its_parts_versions() {
+        let parts = render_parts();
+        assert!(parts.iter().any(|p| p.name == "views" && p.kinds.is_empty()));
+        // the cache keys made before the parts had versions stay as they were
+        assert_eq!(render_version(None), "2");
+        assert_eq!(render_version(Some("drink")), "2");
+        assert_eq!(render_version(Some("bullet")), "");
+        let parts = parts_of(
+            "RENDER_VERSIONS = {\n    \"a\": (3, \"*\"),  # x\n    \"b c\": (1, \"drink tesla\"),\n}\n",
+        );
+        assert_eq!(
+            parts[1],
+            RenderPart {
+                name: "b c".into(),
+                version: 1,
+                kinds: vec!["drink".into(), "tesla".into()],
+            }
+        );
+        assert_eq!(parts[0].version, 3);
+    }
 }

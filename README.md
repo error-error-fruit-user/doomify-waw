@@ -14,7 +14,7 @@ You need World at War (Steam) with **Der Riese loaded in solo zombies**, and [Bl
 doomify-waw build path/to/map/doomify        # or just doomify-waw in that folder
 ```
 
-It takes about an hour the first time: it pulls each weapon from the running game, renders it in Blender and turns the frames into sprites. What it rendered is kept in your cache (`~/.cache/doomify-waw`, `%LOCALAPPDATA%\doomify-waw` on Windows) and shared by every map, so the next map, or the next run, only redoes what changed: a weapon is keyed on what it renders, so changing how it fires doesn't render it again. `--force` redoes everything, `--only thompson` builds one weapon to try things out, `--wait` waits for the game to start, `--blender PATH` picks Blender.
+It takes about an hour the first time: it pulls each weapon from the running game, renders it in Blender and turns the frames into sprites. What it rendered is kept in your cache (`~/.cache/doomify-waw`, `%LOCALAPPDATA%\doomify-waw` on Windows) and shared by every map, so the next map, or the next run, only redoes what changed: a weapon is keyed on what it renders, so changing how it fires doesn't render it again. A newer doomify-waw renders again only the weapons whose part of the render script changed; `doomify-waw versions` lists those versions, so an installer knows when to build again. `--force` redoes everything, `--only thompson` builds one weapon to try things out, `--wait` waits for the game to start, `--blender PATH` picks Blender.
 
 ## How it works
 
