@@ -146,9 +146,18 @@ pub fn renders(weapon: &Weapon) -> Vec<Render> {
             false,
             &shots,
         );
+        // An empty weapon looks empty all the way through: its last aimed shot ends as the
+        // empty idle does (the hip's last shot, aimed, where World at War gives it only its
+        // aimed fire or its loaded idle), and it aims in and out empty.
+        let empties = distinct("empty_idle", "idle").is_some();
+        let loaded = |c: &String| {
+            Some(c) == clip("ads_fire").as_ref() || (empties && Some(c) == clip("idle").as_ref())
+        };
         add(
             "ads_last_fire",
-            clip("ads_last_fire").filter(|c| Some(c) != clip("ads_fire").as_ref()),
+            clip("ads_last_fire")
+                .filter(|c| !loaded(c))
+                .or_else(|| distinct("last_fire", "fire").filter(|_| empties)),
             Stance::Ads,
             false,
             &shots[shots.len().saturating_sub(1)..],
@@ -162,6 +171,20 @@ pub fn renders(weapon: &Weapon) -> Vec<Render> {
         );
         add("zoom_in", clip("idle"), Stance::ZoomIn, false, all);
         add("zoom_out", clip("idle"), Stance::ZoomOut, false, all);
+        add(
+            "empty_zoom_in",
+            distinct("empty_idle", "idle"),
+            Stance::ZoomIn,
+            false,
+            &[None],
+        );
+        add(
+            "empty_zoom_out",
+            distinct("empty_idle", "idle"),
+            Stance::ZoomOut,
+            false,
+            &[None],
+        );
     }
     // a Wunderwaffe that switches its bulbs off to reload (and on as it first comes up) is
     // rendered both lit and dark
@@ -259,6 +282,44 @@ mod tests {
                 "idle", "fire", "ads_idle", "ads_fire", "zoom_in", "zoom_out", "reload", "raise",
                 "drop"
             ]
+        );
+    }
+
+    #[test]
+    fn an_empty_weapon_aims_and_shoots_its_last_empty() {
+        let empty = BASE.replace(
+            "idle = \"idle\"",
+            "idle = \"idle\"\nempty_idle = \"idle_empty\"\nlast_fire = \"lastshot\"",
+        );
+        let w = weapon(&format!("kind = \"bullet\"\n{empty}"));
+        let renders = renders(&w);
+        let clip = |name: &str| {
+            renders
+                .iter()
+                .find(|r| r.name == name)
+                .map(|r| (r.clip.as_str(), r.stance))
+        };
+        assert_eq!(clip("empty_zoom_in"), Some(("idle_empty", Stance::ZoomIn)));
+        assert_eq!(
+            clip("empty_zoom_out"),
+            Some(("idle_empty", Stance::ZoomOut))
+        );
+        // World at War aims its last shot with its aimed fire, which ends loaded
+        assert_eq!(clip("ads_last_fire"), Some(("lastshot", Stance::Ads)));
+
+        // a weapon that looks the same empty has none of them
+        let w = weapon(&format!(
+            "kind = \"bullet\"\n{}",
+            BASE.replace(
+                "idle = \"idle\"",
+                "idle = \"idle\"\nempty_idle = \"idle\"\nlast_fire = \"lastshot\"",
+            )
+        ));
+        let names: Vec<_> = super::renders(&w).into_iter().map(|r| r.name).collect();
+        assert!(
+            !names
+                .iter()
+                .any(|n| n.starts_with("empty_zoom") || n == "ads_last_fire")
         );
     }
 

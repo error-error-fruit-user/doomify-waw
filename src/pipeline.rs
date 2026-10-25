@@ -59,12 +59,23 @@ pub fn build(project: &Project, options: &Options) -> Result<()> {
         }
     }
 
-    // 🗃️ everything pulled and rendered already (and nothing forced): no game, no Blender
+    // 🗃️ everything pulled and rendered already, every render it plans now among them (and
+    // nothing forced): no game, no Blender
+    let rendered_all = |id: &String| {
+        let done: BTreeMap<String, usize> =
+            fs::read_to_string(frames(&weapon_key(id)).join("rendered.json"))
+                .ok()
+                .and_then(|text| serde_json::from_str(&text).ok())
+                .unwrap_or_default();
+        !done.is_empty()
+            && plan::renders(&project.weapons[id])
+                .iter()
+                .all(|render| done.contains_key(&render.name))
+    };
     let cached = !options.force
-        && ids.iter().all(|id| {
-            pull(&weapon_key(id)).join("pull.json").is_file()
-                && frames(&weapon_key(id)).join("rendered.json").is_file()
-        })
+        && ids
+            .iter()
+            .all(|id| pull(&weapon_key(id)).join("pull.json").is_file() && rendered_all(id))
         && project
             .sound_sets
             .keys()

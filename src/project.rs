@@ -109,6 +109,11 @@ const RENDERED: &[&str] = &[
     "ammo",
 ];
 
+/// A render version of one kind of weapon, added to its key: raise it when a change to the script
+/// changes only that kind's frames, so only those are rendered again (`blender::RENDER_VERSION`
+/// renders every weapon again). Drinks: 2 since their glass shows the drink through it.
+const KIND_RENDER_VERSIONS: &[(&str, &str)] = &[("drink", "2")];
+
 /// `id` and an FNV-1a hash of `content`, the scene and the render version: stable across runs
 /// and platforms, which std's hasher is not.
 fn hashed(id: &str, content: &[u8]) -> String {
@@ -227,6 +232,13 @@ impl Project {
         let rendered = match text.parse::<toml::Table>() {
             Ok(mut table) => {
                 table.retain(|key, _| RENDERED.contains(&key));
+                let kind = table.get("kind").and_then(toml::Value::as_str);
+                if let Some((_, version)) = KIND_RENDER_VERSIONS
+                    .iter()
+                    .find(|(name, _)| Some(*name) == kind)
+                {
+                    table.insert("render_version".into(), (*version).into());
+                }
                 if let Some(toml::Value::Table(ammo)) = table.get_mut("ammo") {
                     ammo.retain(|key, _| key == "magazine");
                 }

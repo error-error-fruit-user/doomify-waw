@@ -133,7 +133,19 @@ def see_through(objects):
             image = next((n for n in nodes if n.type == "TEX_IMAGE"), None)
             if shader is None or image is None:
                 continue
-            # never so clear that the sprite's hard edge (alpha 0.5) cuts it away: a bottle's glass
+            if name.endswith("_out"):
+                # A perk bottle's outside is clear glass around the drink, which fills it, with
+                # the label on it: lit as brightly as the rest, the faint glass would turn the
+                # drink white, so only the label (where it is opaque) is drawn
+                label = nodes.new("ShaderNodeMath")
+                label.operation = "GREATER_THAN"
+                label.inputs[1].default_value = 0.5
+                links.new(image.outputs["Alpha"], label.inputs[0])
+                links.new(label.outputs["Value"], shader.inputs["Alpha"])
+                material.blend_method = "CLIP"
+                material.alpha_threshold = 0.5
+                continue
+            # never so clear that the sprite's hard edge (alpha 0.5) cuts it away: a tube's glass
             # with nothing behind it would be a hole
             floor = nodes.new("ShaderNodeMath")
             floor.operation = "MAXIMUM"

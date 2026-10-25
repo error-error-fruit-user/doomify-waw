@@ -710,8 +710,22 @@ fn aim_states(
         .always("ZoomIn:")
         .indented(|code| {
             code.always("TNT1 A 0 AimIn;")
+                .when(built.has("empty_zoom_in"), |code| {
+                    code.always("TNT1 A 0 WhenNoActiveAmmo(\"EmptyZoomInFrom\");")
+                })
                 .when(tesla, |code| dispatch(code, "ZoomInFrom"))
                 .otherwise(|code| code.always("Goto ZoomInFrom;"))
+        })
+        .when(built.has("empty_zoom_in"), |code| {
+            code.always("EmptyZoomInFrom:").indented(|code| {
+                code.append(frames(
+                    Code::new(),
+                    built.get("empty_zoom_in"),
+                    Tic::Plain,
+                    &BTreeMap::new(),
+                ))
+                .always("Goto ZoomReady;")
+            })
         })
         .each(counts, |code, lit| {
             code.always(format!("{}:", label("ZoomInFrom", *lit)))
@@ -753,8 +767,22 @@ fn aim_states(
         .always("ZoomOut:")
         .indented(|code| {
             code.always("TNT1 A 0 ZoomOut;")
+                .when(built.has("empty_zoom_out"), |code| {
+                    code.always("TNT1 A 0 WhenNoActiveAmmo(\"EmptyZoomOutFrom\");")
+                })
                 .when(tesla, |code| dispatch(code, "ZoomOutFrom"))
                 .otherwise(|code| code.always("Goto ZoomOutFrom;"))
+        })
+        .when(built.has("empty_zoom_out"), |code| {
+            code.always("EmptyZoomOutFrom:").indented(|code| {
+                code.append(frames(
+                    Code::new(),
+                    built.get("empty_zoom_out"),
+                    Tic::Plain,
+                    &BTreeMap::new(),
+                ))
+                .always("Goto Ready;")
+            })
         })
         .each(counts, |code, lit| {
             code.always(format!("{}:", label("ZoomOutFrom", *lit)))
