@@ -101,6 +101,43 @@ pub struct Project {
     pub config: Config,
     pub weapons: BTreeMap<String, Weapon>,
     pub sound_sets: BTreeMap<String, SoundSet>,
+    /// Keys caches may have from before they were keyed on the TOMLs' data (by a weapon's id, or
+    /// `sounds-<id>`): moved to their keys now when those aren't there yet. `load` gives the
+    /// ones of the files it read; a program that built its TOMLs in gives theirs
+    /// ([`text_keys`]).
+    pub legacy_keys: BTreeMap<String, Vec<String>>,
+}
+
+/// The keys a cache of a TOML of this `text` had when caches were keyed on the text (`name` is
+/// the weapon's id, or `sounds-<id>`): what it renders, with the drinks' old render version, and
+/// the whole file.
+pub fn text_keys(name: &str, text: &str) -> Vec<String> {
+    let mut keys = Vec::new();
+    if !name.starts_with("sounds-")
+        && let Ok(table) = text.parse::<toml::Table>()
+    {
+        let drink = table.get("kind").and_then(toml::Value::as_str) == Some("drink");
+        let mut table = rendered(table);
+        keys.push(hashed(name, table.to_string().as_bytes()));
+        if drink {
+            table.insert("render_version".into(), "2".into());
+            keys.push(hashed(name, table.to_string().as_bytes()));
+        }
+    }
+    keys.push(hashed(name, text.as_bytes()));
+    keys
+}
+
+/// Of a weapon's table, only what its pulls and renders depend on.
+fn rendered(mut table: toml::Table) -> toml::Table {
+    table.retain(|key, _| RENDERED.contains(&key));
+    if let Some(toml::Value::Table(ammo)) = table.get_mut("ammo") {
+        ammo.retain(|key, _| key == "magazine");
+    }
+    if let Some(toml::Value::Table(wall)) = table.get_mut("wall") {
+        wall.retain(|key, _| key == "chalk");
+    }
+    table
 }
 
 /// What in a weapon's TOML its pulls and renders depend on: what to pull, the clips and sounds,
@@ -190,12 +227,25 @@ impl Project {
             );
         }
         let sound_sets = sounds::load_all(&root.join(config.sounds.as_ref()))?;
-        Ok(Self {
+        let mut project = Self {
             root,
             config,
             weapons,
             sound_sets,
-        })
+            legacy_keys: BTreeMap::new(),
+        };
+        for id in project.weapons.keys() {
+            let text = fs::read_to_string(project.weapon_file(id)).unwrap_or_default();
+            project.legacy_keys.insert(id.clone(), text_keys(id, &text));
+        }
+        for id in project.sound_sets.keys() {
+            let name = format!("sounds-{id}");
+            let text = fs::read_to_string(project.sound_file(id)).unwrap_or_default();
+            project
+                .legacy_keys
+                .insert(name.clone(), text_keys(&name, &text));
+        }
+        Ok(project)
     }
 
     pub fn path(&self, relative: &Path) -> PathBuf {
@@ -213,35 +263,20 @@ impl Project {
         }
     }
 
-    /// The cache folder for a TOML: its id and a hash of its text, the scene and the render
-    /// version, so a change to any of them renders it again.
-    pub fn keyed(&self, id: &str, file: &Path) -> String {
-        hashed(id, &fs::read(file).unwrap_or_default())
-    }
-
-    /// A weapon's cache key: a hash of only what its pulls and renders depend on, so changing
-    /// how it plays (its fire, its slot, its look in flight) renders nothing again.
+    /// A weapon's cache key: a hash of only the data its pulls and renders depend on, so changing
+    /// how it plays (its fire, its slot, its look in flight), or a comment, renders nothing again.
     pub fn weapon_key(&self, id: &str) -> String {
-        let text = fs::read_to_string(self.weapon_file(id)).unwrap_or_default();
-        let rendered = match text.parse::<toml::Table>() {
-            Ok(mut table) => {
-                table.retain(|key, _| RENDERED.contains(&key));
-                if let Some(toml::Value::Table(ammo)) = table.get_mut("ammo") {
-                    ammo.retain(|key, _| key == "magazine");
-                }
-                if let Some(toml::Value::Table(wall)) = table.get_mut("wall") {
-                    wall.retain(|key, _| key == "chalk");
-                }
-                table.to_string()
-            }
-            Err(_) => text,
+        let table = match toml::Value::try_from(&self.weapons[id]) {
+            Ok(toml::Value::Table(table)) => table,
+            _ => toml::Table::new(),
         };
-        hashed(id, rendered.as_bytes())
+        hashed(id, rendered(table).to_string().as_bytes())
     }
 
-    /// The key a weapon's cache had before `weapon_key` (its whole file), to keep its renders.
-    pub fn legacy_weapon_key(&self, id: &str) -> String {
-        self.keyed(id, &self.weapon_file(id))
+    /// A sound set's cache key: a hash of its data.
+    pub fn sound_key(&self, id: &str) -> String {
+        let data = toml::to_string(&self.sound_sets[id]).unwrap_or_default();
+        hashed(&format!("sounds-{id}"), data.as_bytes())
     }
 
     /// `Nacht_Thompson` for the weapon `thompson`.
@@ -267,5 +302,39 @@ impl Project {
     pub fn sound_file(&self, id: &str) -> PathBuf {
         self.path(Path::new(self.config.sounds.as_ref()))
             .join(format!("{id}.toml"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::DEFAULTS;
+
+    #[test]
+    fn a_toml_written_from_its_data_reads_as_the_same_data() {
+        for (path, text) in DEFAULTS {
+            if path.starts_with("weapons/") {
+                let weapon: Weapon = toml::from_str(text).unwrap();
+                let written = toml::to_string(&weapon).unwrap();
+                assert_eq!(
+                    toml::from_str::<Weapon>(&written).unwrap(),
+                    weapon,
+                    "{path}"
+                );
+            } else {
+                let set: SoundSet = toml::from_str(text).unwrap();
+                let written = toml::to_string(&set).unwrap();
+                assert_eq!(toml::from_str::<SoundSet>(&written).unwrap(), set, "{path}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_old_keys_of_a_text_include_what_it_renders() {
+        let text = "kind = \"drink\"\n# a comment\nslot = 0\n";
+        let keys = text_keys("jugg", text);
+        assert_eq!(keys.len(), 3);
+        assert_eq!(keys[2], hashed("jugg", text.as_bytes()));
+        assert_eq!(text_keys("sounds-zombie", text).len(), 1);
     }
 }

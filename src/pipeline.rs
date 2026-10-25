@@ -66,16 +66,23 @@ pub fn build(project: &Project, options: &Options) -> Result<()> {
     fs::create_dir_all(&work)?;
     let work = work.canonicalize()?;
     let weapon_key = |id: &str| project.weapon_key(id);
-    let sound_key = |id: &str| project.keyed(&format!("sounds-{id}"), &project.sound_file(id));
+    let sound_key = |id: &str| project.sound_key(id);
     let pull = |key: &str| work.join("pull").join(key);
     let frames = |key: &str| work.join("frames").join(key);
-    // Caches from before weapons were keyed on what they render move to their new keys
-    for id in &ids {
-        let (old, new) = (project.legacy_weapon_key(id), weapon_key(id));
-        for kind in ["pull", "frames"] {
-            let (old, new) = (work.join(kind).join(&old), work.join(kind).join(&new));
-            if !new.exists() && old.exists() {
-                fs::rename(old, new)?;
+    // 🗝️ caches from before they were keyed on the TOMLs' data move to their keys
+    let names = ids.iter().map(|id| (id.clone(), weapon_key(id))).chain(
+        project
+            .sound_sets
+            .keys()
+            .map(|id| (format!("sounds-{id}"), sound_key(id))),
+    );
+    for (name, new) in names {
+        for old in project.legacy_keys.get(&name).into_iter().flatten() {
+            for kind in ["pull", "frames"] {
+                let (old, new) = (work.join(kind).join(old), work.join(kind).join(&new));
+                if !new.exists() && old.exists() {
+                    fs::rename(old, new)?;
+                }
             }
         }
     }
@@ -207,10 +214,7 @@ fn assemble(project: &Project, ids: &[String], work: &Path, say: fn(&str)) -> Re
     let mut folders: Vec<PathBuf> = project
         .sound_sets
         .keys()
-        .map(|id| {
-            work.join("pull")
-                .join(project.keyed(&format!("sounds-{id}"), &project.sound_file(id)))
-        })
+        .map(|id| work.join("pull").join(project.sound_key(id)))
         .collect();
     folders.extend(
         ids.iter()
