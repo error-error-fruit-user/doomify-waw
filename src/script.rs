@@ -1,4 +1,5 @@
-//! `doomify-waw --script FILE.toml --out DIR`: pulls what a TOML names from the running game.
+//! `--script FILE.toml --out DIR`, which the program built with doomify hands to [`run`]: pulls
+//! what a TOML names from the running game.
 //! The Blender script runs it for every weapon and sound set before rendering. A weapon's TOML
 //! (see `weapon.rs`) pulls:
 //!
@@ -136,18 +137,14 @@ fn clips_of(glb: &Path) -> Result<BTreeMap<String, Clip>> {
 }
 
 fn pull_weapon(game: &Game, weapon: &Weapon, out: &Path) -> Result<Pulled> {
-    game.require_weapons([weapon.game.weapon.as_str()])?;
+    game.require_weapons([weapon.game.weapon.as_ref()])?;
     let mut pulled = Pulled::default();
     let view = out.join("view.glb");
-    export(game, &weapon.game.models, &weapon.clips(), &view)?;
+    let models: Vec<String> = weapon.game.models.iter().map(|m| m.to_string()).collect();
+    export(game, &models, &weapon.clips(), &view)?;
     pulled.clips = clips_of(&view)?;
     if let Some(world) = &weapon.game.world {
-        export(
-            game,
-            std::slice::from_ref(world),
-            &[],
-            &out.join("world.glb"),
-        )?;
+        export(game, &[world.to_string()], &[], &out.join("world.glb"))?;
         pulled.world = true;
     }
     if let Some(wall) = &weapon.wall {
@@ -163,7 +160,7 @@ fn pull_weapon(game: &Game, weapon: &Weapon, out: &Path) -> Result<Pulled> {
         pulled.chalk = true;
     }
     // The roles' sounds, and whatever the clips' notetracks play that is a sound.
-    let mut aliases: Vec<String> = weapon.sounds.values().cloned().collect();
+    let mut aliases: Vec<String> = weapon.sounds.values().map(|a| a.to_string()).collect();
     for clip in pulled.clips.values() {
         aliases.extend(clip.events.iter().map(|(name, _)| name.clone()));
     }

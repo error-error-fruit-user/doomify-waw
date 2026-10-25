@@ -3,7 +3,7 @@
 //! says when it goes in:
 //!
 //! ```
-//! # use doomify_waw::code::Code;
+//! # use doomify::code::Code;
 //! # let (zoom, auto) = (true, false);
 //! let fire = Code::new()
 //!     .always("Fire:")

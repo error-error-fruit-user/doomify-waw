@@ -16,15 +16,9 @@ use std::{
     fs,
     io::Write,
     path::{Path, PathBuf},
+    process::{Command, ExitStatus},
 };
 
-/// The version of what is built from the renders (the renders each weapon plans, its sprites
-/// and code, the sounds): raise it when a change to doomify-waw changes the pk3 it builds, so
-/// installers build their weapons again (`doomify-waw versions`). The render script's parts have
-/// their own, in its `RENDER_VERSIONS`.
-pub const ASSEMBLY_VERSION: u32 = 1;
-
-#[derive(Default)]
 pub struct Options {
     pub blender: Option<PathBuf>,
     /// Build only these weapons (for trying things out; the pk3 then has only them).
@@ -36,9 +30,30 @@ pub struct Options {
     pub wait: bool,
     /// Don't run Blender: assemble from earlier pulls and renders.
     pub offline: bool,
+    /// Says how far the build has got, a line at a time (printed by default).
+    pub say: fn(&str),
+    /// Runs Blender (shown as the `&str`), whose lines are its own (as it is by default, its
+    /// lines printed).
+    pub run: fn(&mut Command, &str) -> std::io::Result<ExitStatus>,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Options {
+            blender: None,
+            only: Vec::new(),
+            force: false,
+            pid: None,
+            wait: false,
+            offline: false,
+            say: |line| println!("{line}"),
+            run: |command, _| command.status(),
+        }
+    }
 }
 
 pub fn build(project: &Project, options: &Options) -> Result<()> {
+    let say = options.say;
     let ids: Vec<String> = if options.only.is_empty() {
         project.weapons.keys().cloned().collect()
     } else {
@@ -78,25 +93,38 @@ pub fn build(project: &Project, options: &Options) -> Result<()> {
                 .iter()
                 .all(|render| done.contains_key(&render.name))
     };
+    // 🖌️ a part of the render script flagged changed renders the weapons it draws again, until
+    // they are rendered with the script as it is now
+    let parts = blender::render_parts();
+    let mark = blender::script_mark();
+    let stale = |id: &String| {
+        let kind = serde_json::to_value(project.weapons[id].kind).unwrap_or_default();
+        let kind = kind.as_str().unwrap_or_default();
+        parts.iter().any(|part| part.changed && part.draws(kind))
+            && fs::read_to_string(frames(&weapon_key(id)).join("script.mark"))
+                .ok()
+                .as_deref()
+                != Some(mark.as_str())
+    };
     let cached = !options.force
-        && ids
-            .iter()
-            .all(|id| pull(&weapon_key(id)).join("pull.json").is_file() && rendered_all(id))
+        && ids.iter().all(|id| {
+            pull(&weapon_key(id)).join("pull.json").is_file() && rendered_all(id) && !stale(id)
+        })
         && project
             .sound_sets
             .keys()
             .all(|id| pull(&sound_key(id)).join("pull.json").is_file());
     if cached {
-        println!(
+        say(&format!(
             "Every weapon and sound set is pulled and rendered already, in {}: World at War and Blender aren't needed (--force does it again)",
             work.display()
-        );
+        ));
     }
     if !options.offline && !cached {
         let game = Game::find(options.pid, options.wait)?;
         game.require_weapons(
             ids.iter()
-                .map(|id| project.weapons[id].game.weapon.as_str()),
+                .map(|id| project.weapons[id].game.weapon.as_ref()),
         )?;
         let exe = std::env::current_exe()?;
         let job = json!({
@@ -116,6 +144,7 @@ pub fn build(project: &Project, options: &Options) -> Result<()> {
                     "pull": pull(&weapon_key(id)),
                     "frames": frames(&weapon_key(id)),
                     "force": options.force,
+                    "rerender": stale(id),
                     "ads_fov": weapon.view.ads_fov,
                     "hold": weapon.view.hold,
                     "hold_in": weapon.view.hold_in,
@@ -130,18 +159,21 @@ pub fn build(project: &Project, options: &Options) -> Result<()> {
         let job_path = work.join(format!("job-{}.json", project.config.prefix.to_lowercase()));
         fs::write(&job_path, serde_json::to_string_pretty(&job)?)?;
         let command = blender::find(options.blender.as_deref())?;
-        println!(
+        say(&format!(
             "Pulling from World at War and rendering in Blender ({})...",
             command.join(" ")
-        );
-        blender::run(&command, &work, &job_path)?;
+        ));
+        blender::run(&command, &work, &job_path, options.run)?;
+        for id in &ids {
+            fs::write(frames(&weapon_key(id)).join("script.mark"), &mark)?;
+        }
     }
 
-    assemble(project, &ids, &work)
+    assemble(project, &ids, &work, say)
 }
 
 /// The pk3 folder from what was pulled and rendered.
-fn assemble(project: &Project, ids: &[String], work: &Path) -> Result<()> {
+fn assemble(project: &Project, ids: &[String], work: &Path, say: fn(&str)) -> Result<()> {
     let out = project.output();
     if out.exists() {
         ensure!(
@@ -155,22 +187,22 @@ fn assemble(project: &Project, ids: &[String], work: &Path) -> Result<()> {
     // Marked first, so a build that fails halfway can still be replaced
     fs::write(
         out.join("DOOMIFY.txt"),
-        "Made by doomify-waw; replaced when it runs again.\n",
+        "Made by doomify; replaced when it runs again.\n",
     )?;
     let taken = sprites::existing(
         &project
             .config
             .sprites_of
             .iter()
-            .map(|p| project.path(p))
+            .map(|p| project.path(Path::new(p.as_ref())))
             .collect::<Vec<_>>(),
     )?;
 
     // Sounds: every alias once, whoever pulled it.
-    println!(
+    say(&format!(
         "Gathering the sounds into {}",
         out.join("sounds/waw").display()
-    );
+    ));
     let mut sounds: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut folders: Vec<PathBuf> = project
         .sound_sets
@@ -216,10 +248,10 @@ fn assemble(project: &Project, ids: &[String], work: &Path) -> Result<()> {
         pulls.insert(folder.clone(), pulled);
     }
 
-    println!(
+    say(&format!(
         "Gathered {} sounds",
         sounds.values().map(Vec::len).sum::<usize>()
-    );
+    ));
 
     // Sprites and code, a weapon per core at a time.
     let one = |index: usize| -> Result<Built> {
@@ -273,16 +305,22 @@ fn assemble(project: &Project, ids: &[String], work: &Path) -> Result<()> {
             frames,
             pickup,
             chalk,
-            upgrade_built: weapon.upgrade.as_ref().is_some_and(|u| ids.contains(u)),
-            downed_built: weapon.downed.as_ref().is_some_and(|d| ids.contains(d)),
+            upgrade_built: weapon
+                .upgrade
+                .as_ref()
+                .is_some_and(|u| ids.iter().any(|id| id == u)),
+            downed_built: weapon
+                .downed
+                .as_ref()
+                .is_some_and(|d| ids.iter().any(|id| id == d)),
         })
     };
     let cores = std::thread::available_parallelism().map_or(4, |n| n.get());
-    println!(
+    say(&format!(
         "Cutting the renders of {} weapons into sprites, {} at a time",
         ids.len(),
         cores.min(ids.len())
-    );
+    ));
     let next = std::sync::atomic::AtomicUsize::new(0);
     let cut = std::sync::atomic::AtomicUsize::new(0);
     let mut results: Vec<(usize, Result<Built>)> = std::thread::scope(|scope| {
@@ -300,11 +338,11 @@ fn assemble(project: &Project, ids: &[String], work: &Path) -> Result<()> {
                         let count = cut.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
                         if let Ok(built) = &built {
                             let sprites: usize = built.frames.values().map(Vec::len).sum();
-                            println!(
+                            say(&format!(
                                 "Cut {} into {sprites} sprites ({count}/{})",
                                 ids[index],
                                 ids.len()
-                            );
+                            ));
                         }
                         done.push((index, built));
                     }
@@ -324,7 +362,10 @@ fn assemble(project: &Project, ids: &[String], work: &Path) -> Result<()> {
         .collect::<Result<Vec<_>>>()?;
 
     let files = generate::files(project, &built, &sounds);
-    println!("Writing {} files of code and definitions", files.len());
+    say(&format!(
+        "Writing {} files of code and definitions",
+        files.len()
+    ));
     for (path, text) in files {
         let target = out.join(&path);
         if let Some(parent) = target.parent() {
@@ -332,12 +373,16 @@ fn assemble(project: &Project, ids: &[String], work: &Path) -> Result<()> {
         }
         fs::write(&target, text)?;
     }
-    println!("Wrote {}", out.display());
+    say(&format!("Wrote {}", out.display()));
     if let Some(pack) = &project.config.pack {
-        let pack = project.path(pack);
-        println!("Packing {} into {}", out.display(), pack.display());
+        let pack = project.path(Path::new(pack.as_ref()));
+        say(&format!(
+            "Packing {} into {}",
+            out.display(),
+            pack.display()
+        ));
         zip_folder(&out, &pack)?;
-        println!("Packed {}", pack.display());
+        say(&format!("Packed {}", pack.display()));
     }
     Ok(())
 }

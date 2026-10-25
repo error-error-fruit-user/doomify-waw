@@ -1,4 +1,4 @@
-"""Builds weapon.blend, the scene doomify-waw renders every weapon in. Run it with Blender:
+"""Builds weapon.blend, the scene doomify renders every weapon in. Run it with Blender:
 
     blender -b --factory-startup --python blender/make_blend.py -- blender/weapon.blend
 

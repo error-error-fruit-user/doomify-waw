@@ -37,7 +37,7 @@ pub fn files(
         Code::new()
             .always("version \"5.0.0\"")
             .gap()
-            .always("// World at War's weapons, rebuilt by doomify-waw from the player's own game.")
+            .always("// World at War's weapons, rebuilt by doomify from the player's own game.")
             .each(includes, |code, path| {
                 code.always(format!("#include \"{path}\""))
             })
@@ -50,7 +50,7 @@ pub fn files(
     files.insert(
         "DOOMIFY.txt".into(),
         formatdoc! {r#"
-            Made by doomify-waw from the player's own copy of Call of Duty: World at War, for {p}.
+            Made by doomify from the player's own copy of Call of Duty: World at War, for {p}.
             Everything in this folder is replaced when doomify runs again; don't share it.
         "#},
     );
@@ -72,7 +72,7 @@ fn player_class(project: &Project, player: &crate::project::Player) -> String {
                         code.always(format!("Player.WeaponSlot {slot}, \"\";"))
                     })
                     .always("// a start item gets no ammo of its own (Weapon.AmmoGive is for pickups)")
-                    .each(&player.start, |code, item| {
+                    .each(player.start.iter(), |code, item| {
                         let class = project.class(&item.weapon);
                         code.always(format!("Player.StartItem \"{class}\";"))
                             .when(item.ammo > 0, |code| {
@@ -88,33 +88,40 @@ fn player_class(project: &Project, player: &crate::project::Player) -> String {
 /// as aliases of them.
 fn sndinfo(project: &Project, sounds: &BTreeMap<String, Vec<String>>) -> String {
     Code::new()
-        .always("// World at War's sounds, as the game names them (waw/<alias>), pulled by doomify-waw.")
+        .always(
+            "// World at War's sounds, as the game names them (waw/<alias>), pulled by doomify.",
+        )
         .gap()
         .each(sounds, |code, (alias, files)| {
             let name = sound(alias);
-            code.when(files.len() == 1, |code| code.always(format!("{name} {}", files[0])))
-                .otherwise(|code| {
-                    code.each(files.iter().enumerate(), |code, (index, file)| {
-                        code.always(format!("{name}_{index} {file}"))
-                    })
-                    .always(format!(
-                        "$random {name} {{ {} }}",
-                        (0..files.len())
-                            .map(|i| format!("{name}_{i}"))
-                            .collect::<Vec<_>>()
-                            .join(" ")
-                    ))
+            code.when(files.len() == 1, |code| {
+                code.always(format!("{name} {}", files[0]))
+            })
+            .otherwise(|code| {
+                code.each(files.iter().enumerate(), |code, (index, file)| {
+                    code.always(format!("{name}_{index} {file}"))
                 })
+                .always(format!(
+                    "$random {name} {{ {} }}",
+                    (0..files.len())
+                        .map(|i| format!("{name}_{i}"))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                ))
+            })
         })
-        .each(&project.sound_sets, |code, (id, set): (&String, &SoundSet)| {
-            code.gap()
-                .always(format!("// {} (sounds/{id}.toml)", set.name))
-                .each(&set.sounds, |code, (name, entry)| {
-                    code.when(sounds.contains_key(&entry.alias), |code| {
-                        code.always(format!("$alias {name} {}", sound(&entry.alias)))
+        .each(
+            &project.sound_sets,
+            |code, (id, set): (&String, &SoundSet)| {
+                code.gap()
+                    .always(format!("// {} (sounds/{id}.toml)", set.name))
+                    .each(&set.sounds, |code, (name, entry)| {
+                        code.when(sounds.contains_key(entry.alias.as_ref()), |code| {
+                            code.always(format!("$alias {name} {}", sound(&entry.alias)))
+                        })
                     })
-                })
-        })
+            },
+        )
         .build()
 }
 
@@ -124,7 +131,7 @@ fn mapinfo(project: &Project, built: &[Built]) -> String {
         .config
         .editor_numbers
         .iter()
-        .filter(|(id, _)| built.iter().any(|b| b.id == id.as_str()))
+        .filter(|(id, _)| built.iter().any(|b| b.id == id.as_ref()))
         .collect();
     Code::new()
         .always("// The Wunderwaffe's shock on screen, and the wall drawings' editor numbers (doomify.toml)")

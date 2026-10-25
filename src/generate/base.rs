@@ -6,7 +6,7 @@ use indoc::formatdoc;
 /// The base of every generated weapon.
 pub fn weapon(p: &str) -> String {
     formatdoc! {r#####"
-        // The base of the weapons doomify-waw rebuilt from World at War. Every frame was rendered
+        // The base of the weapons doomify rebuilt from World at War. Every frame was rendered
         // at 35 a second, Doom's tic rate, so it shows for one tic; Speed Cola and Double Tap
         // speed an animation up by skipping frames instead of shortening them.
 

@@ -1,7 +1,13 @@
 //! A map's `doomify.toml`: where its weapons and sound sets are, the prefix its classes take,
 //! where the built pk3 goes and the editor numbers of its wall drawings.
 
-use crate::{sounds, sounds::SoundSet, weapon, weapon::Weapon};
+use crate::{
+    sounds,
+    sounds::SoundSet,
+    types::{List, Map, Text},
+    weapon,
+    weapon::Weapon,
+};
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -10,34 +16,34 @@ use std::{
     path::{Path, PathBuf},
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub version: u32,
     /// The class prefix, without the underscore (`Nacht` → `Nacht_Thompson`).
-    pub prefix: String,
+    pub prefix: Text,
     /// The pk3 folder doomify writes (and replaces), relative to this file.
-    pub output: PathBuf,
+    pub output: Text,
     /// Also zip the folder into this pk3.
     #[serde(default)]
-    pub pack: Option<PathBuf>,
+    pub pack: Option<Text>,
     /// Where pulls and renders are kept between runs; by default the user's cache, shared by
     /// every map (a weapon is rendered again only when its TOML changes).
     #[serde(default)]
-    pub work: Option<PathBuf>,
+    pub work: Option<Text>,
     #[serde(default = "weapons")]
-    pub weapons: PathBuf,
+    pub weapons: Text,
     #[serde(default = "sound_sets")]
-    pub sounds: PathBuf,
+    pub sounds: Text,
     /// World at War's damage times this is Doom's (the map's zombies have less health).
     #[serde(default = "damage_scale")]
     pub damage_scale: f64,
     /// Editor numbers for the wall drawings, by weapon id.
     #[serde(default)]
-    pub editor_numbers: BTreeMap<String, u32>,
+    pub editor_numbers: Map<u32>,
     /// The pk3 folders whose sprite names must not clash with the generated ones (the map's).
     #[serde(default)]
-    pub sprites_of: Vec<PathBuf>,
+    pub sprites_of: List<Text>,
     /// The player class the pk3 brings, if any: Doom's marine with World at War's start items.
     #[serde(default)]
     pub player: Option<Player>,
@@ -50,35 +56,35 @@ pub struct Config {
 pub struct Player {
     /// The name in the player class menu.
     #[serde(default = "player_name")]
-    pub name: String,
+    pub name: Text,
     /// What it starts with: a weapon id and the rounds it brings.
     #[serde(default)]
-    pub start: Vec<StartItem>,
+    pub start: List<StartItem>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct StartItem {
-    pub weapon: String,
+    pub weapon: Text,
     #[serde(default)]
     pub ammo: u32,
 }
 
-fn player_name() -> String {
-    "Marine (World at War)".into()
+fn player_name() -> Text {
+    Text::Borrowed("Marine (World at War)")
 }
 
-fn weapons() -> PathBuf {
-    "weapons".into()
+fn weapons() -> Text {
+    Text::Borrowed("weapons")
 }
-fn sound_sets() -> PathBuf {
-    "sounds".into()
+fn sound_sets() -> Text {
+    Text::Borrowed("sounds")
 }
 fn damage_scale() -> f64 {
     0.1
 }
 
-/// The user's cache folder for doomify-waw.
+/// The user's cache folder for doomify (named `doomify-waw`, as it was, so its renders are kept).
 pub fn cache() -> PathBuf {
     let base = if cfg!(windows) {
         std::env::var_os("LOCALAPPDATA").map(PathBuf::from)
@@ -109,19 +115,16 @@ const RENDERED: &[&str] = &[
     "ammo",
 ];
 
-/// `id` and an FNV-1a hash of `content`, the scene and the version of the render script's parts
-/// that draw every weapon: stable across runs and platforms, which std's hasher is not.
+/// `id` and an FNV-1a hash of `content` and the scene: stable across runs and platforms, which
+/// std's hasher is not. (The "2" is the render version the caches were keyed with before the
+/// render script's parts were flagged `changed`, so they stay where they are.)
 fn hashed(id: &str, content: &[u8]) -> String {
-    let hash = [
-        content,
-        crate::blender::SCENE,
-        crate::blender::render_version(None).as_bytes(),
-    ]
-    .iter()
-    .flat_map(|part| part.iter())
-    .fold(0xcbf29ce484222325u64, |h, b| {
-        (h ^ *b as u64).wrapping_mul(0x100000001b3)
-    });
+    let hash = [content, crate::blender::SCENE, b"2"]
+        .iter()
+        .flat_map(|part| part.iter())
+        .fold(0xcbf29ce484222325u64, |h, b| {
+            (h ^ *b as u64).wrapping_mul(0x100000001b3)
+        });
     format!("{id}-{:08x}", hash as u32)
 }
 
@@ -140,12 +143,8 @@ impl Project {
             .parent()
             .context("doomify.toml has no folder")?
             .to_path_buf();
-        let text = fs::read_to_string(&file).with_context(|| {
-            format!(
-                "Cannot read {} (doomify-waw init writes one)",
-                file.display()
-            )
-        })?;
+        let text =
+            fs::read_to_string(&file).with_context(|| format!("Cannot read {}", file.display()))?;
         let config: Config =
             toml::from_str(&text).with_context(|| format!("Invalid {}", file.display()))?;
         ensure!(
@@ -161,7 +160,7 @@ impl Project {
             "prefix must be letters and digits, like Nacht"
         );
         ensure!(config.damage_scale > 0.0, "damage_scale must be positive");
-        let weapons = weapon::load_all(&root.join(&config.weapons))?;
+        let weapons = weapon::load_all(&root.join(config.weapons.as_ref()))?;
         for code in RESERVED_SPRITE_CODES {
             if let Some((id, _)) = weapons
                 .iter()
@@ -173,7 +172,7 @@ impl Project {
         let mut numbers = BTreeMap::new();
         for (id, number) in &config.editor_numbers {
             let weapon = weapons
-                .get(id)
+                .get(id.as_ref())
                 .with_context(|| format!("editor_numbers names {id}, which has no weapon file"))?;
             ensure!(
                 weapon.wall.is_some(),
@@ -183,14 +182,14 @@ impl Project {
                 bail!("editor number {number} is given to both {other} and {id}");
             }
         }
-        for item in config.player.iter().flat_map(|player| &player.start) {
+        for item in config.player.iter().flat_map(|player| player.start.iter()) {
             ensure!(
-                weapons.contains_key(&item.weapon),
+                weapons.contains_key(item.weapon.as_ref() as &str),
                 "[player] starts with {}, which has no weapon file",
                 item.weapon
             );
         }
-        let sound_sets = sounds::load_all(&root.join(&config.sounds))?;
+        let sound_sets = sounds::load_all(&root.join(config.sounds.as_ref()))?;
         Ok(Self {
             root,
             config,
@@ -204,12 +203,12 @@ impl Project {
     }
 
     pub fn output(&self) -> PathBuf {
-        self.path(&self.config.output)
+        self.path(Path::new(self.config.output.as_ref()))
     }
 
     pub fn work(&self) -> PathBuf {
         match &self.config.work {
-            Some(work) => self.path(work),
+            Some(work) => self.path(Path::new(work.as_ref())),
             None => cache(),
         }
     }
@@ -227,12 +226,6 @@ impl Project {
         let rendered = match text.parse::<toml::Table>() {
             Ok(mut table) => {
                 table.retain(|key, _| RENDERED.contains(&key));
-                // the render script's parts that draw only some kinds (the drinks' glass)
-                let kind = table.get("kind").and_then(toml::Value::as_str);
-                let version = crate::blender::render_version(Some(kind.unwrap_or_default()));
-                if !version.is_empty() {
-                    table.insert("render_version".into(), version.into());
-                }
                 if let Some(toml::Value::Table(ammo)) = table.get_mut("ammo") {
                     ammo.retain(|key, _| key == "magazine");
                 }
@@ -267,10 +260,12 @@ impl Project {
     }
 
     pub fn weapon_file(&self, id: &str) -> PathBuf {
-        self.path(&self.config.weapons).join(format!("{id}.toml"))
+        self.path(Path::new(self.config.weapons.as_ref()))
+            .join(format!("{id}.toml"))
     }
 
     pub fn sound_file(&self, id: &str) -> PathBuf {
-        self.path(&self.config.sounds).join(format!("{id}.toml"))
+        self.path(Path::new(self.config.sounds.as_ref()))
+            .join(format!("{id}.toml"))
     }
 }

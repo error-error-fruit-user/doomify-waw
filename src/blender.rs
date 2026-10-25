@@ -1,4 +1,4 @@
-//! Running Blender on a job: the scene and script are built into doomify-waw, written next to
+//! Running Blender on a job: the scene and script are built into doomify, written next to
 //! the job and run headless.
 
 use anyhow::{Context, Result, bail, ensure};
@@ -13,24 +13,37 @@ pub const SCENE: &[u8] = include_bytes!("../blender/weapon.blend");
 /// The script that pulls with `--script` and renders.
 pub const SCRIPT: &str = include_str!("../blender/render.py");
 
-/// A part of the render script and its version, from its `RENDER_VERSIONS`.
+/// A part of the render script, from its `RENDER_PARTS`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RenderPart {
     pub name: String,
-    pub version: u32,
     /// The weapon kinds it draws; empty for every weapon ("*").
     pub kinds: Vec<String>,
+    /// Changed so that it draws them differently: they are rendered again, once.
+    pub changed: bool,
 }
 
-/// The parts of the render script and their versions, as its `RENDER_VERSIONS` gives them
-/// (`"name": (version, "kinds"),`, one to a line).
+impl RenderPart {
+    /// Whether it draws weapons of `kind` (snake_case, as in a TOML).
+    pub fn draws(&self, kind: &str) -> bool {
+        self.kinds.is_empty() || self.kinds.iter().any(|k| k == kind)
+    }
+}
+
+/// The parts of the render script, as its `RENDER_PARTS` gives them
+/// (`"name": {"kinds": "drink tesla", "changed": True},`, one to a line).
 pub fn render_parts() -> Vec<RenderPart> {
     parts_of(SCRIPT)
 }
 
 fn parts_of(script: &str) -> Vec<RenderPart> {
-    let Some(start) = script.find("RENDER_VERSIONS = {") else {
+    let Some(start) = script.find("RENDER_PARTS = {") else {
         return Vec::new();
+    };
+    let quoted = |text: &str, key: &str| -> Option<String> {
+        let rest = &text[text.find(&format!("\"{key}\""))? + key.len() + 2..];
+        let rest = &rest[rest.find('"')? + 1..];
+        Some(rest[..rest.find('"')?].to_string())
     };
     script[start..]
         .lines()
@@ -38,33 +51,27 @@ fn parts_of(script: &str) -> Vec<RenderPart> {
         .take_while(|line| !line.trim_start().starts_with('}'))
         .filter_map(|line| {
             let line = line.split('#').next()?.trim();
-            let (name, rest) = line.strip_prefix('"')?.split_once("\": (")?;
-            let (version, kinds) = rest.split_once(',')?;
-            let kinds = kinds.trim().strip_prefix('"')?.split('"').next()?;
+            let name = line.strip_prefix('"')?.split('"').next()?.to_string();
+            let kinds = quoted(line, "kinds")?;
             Some(RenderPart {
-                name: name.to_string(),
-                version: version.trim().parse().ok()?,
-                kinds: match kinds {
+                name,
+                kinds: match kinds.as_str() {
                     "*" => Vec::new(),
                     kinds => kinds.split_whitespace().map(str::to_string).collect(),
                 },
+                changed: line.contains("\"changed\": True"),
             })
         })
         .collect()
 }
 
-/// The versions of the parts that draw `kind` (every weapon's when `None`), joined with dots:
-/// part of a render's cache key.
-pub fn render_version(kind: Option<&str>) -> String {
-    render_parts()
-        .iter()
-        .filter(|part| match kind {
-            None => part.kinds.is_empty(),
-            Some(kind) => part.kinds.iter().any(|k| k == kind),
-        })
-        .map(|part| part.version.to_string())
-        .collect::<Vec<_>>()
-        .join(".")
+/// A mark of the render script as it is, noted beside each weapon's renders: a part `changed`
+/// renders the weapons it draws again while the mark they were rendered with differs.
+pub fn script_mark() -> String {
+    let hash = SCRIPT.bytes().fold(0xcbf29ce484222325u64, |h, b| {
+        (h ^ b as u64).wrapping_mul(0x100000001b3)
+    });
+    format!("{hash:016x}")
 }
 
 /// The Blender to run: `explicit`, else $BLENDER, else `blender` on the PATH, else the usual
@@ -127,7 +134,12 @@ pub fn find(explicit: Option<&Path>) -> Result<Vec<String>> {
 }
 
 /// Runs the job file `job` with Blender `command`, the scene and script written into `work`.
-pub fn run(command: &[String], work: &Path, job: &Path) -> Result<()> {
+pub fn run(
+    command: &[String],
+    work: &Path,
+    job: &Path,
+    run: fn(&mut Command, &str) -> std::io::Result<std::process::ExitStatus>,
+) -> Result<()> {
     fs::create_dir_all(work)?;
     let scene = work.join("weapon.blend");
     let script = work.join("render.py");
@@ -143,7 +155,7 @@ pub fn run(command: &[String], work: &Path, job: &Path) -> Result<()> {
     } else {
         Command::new(program)
     };
-    let status = blender
+    blender
         .args(arguments)
         .arg("--background")
         .arg(&scene)
@@ -153,9 +165,15 @@ pub fn run(command: &[String], work: &Path, job: &Path) -> Result<()> {
         .arg(&script)
         .arg("--")
         .arg("--job")
-        .arg(job)
-        .status()
-        .with_context(|| format!("Cannot run Blender ({program})"))?;
+        .arg(job);
+    let status = run(
+        &mut blender,
+        &format!(
+            "{} --background weapon.blend --python render.py",
+            command.join(" ")
+        ),
+    )
+    .with_context(|| format!("Cannot run Blender ({program})"))?;
     ensure!(
         status.success(),
         "Blender failed ({status}); its output above says why"
@@ -174,24 +192,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_render_script_gives_its_parts_versions() {
-        let parts = render_parts();
-        assert!(parts.iter().any(|p| p.name == "views" && p.kinds.is_empty()));
-        // the cache keys made before the parts had versions stay as they were
-        assert_eq!(render_version(None), "2");
-        assert_eq!(render_version(Some("drink")), "2");
-        assert_eq!(render_version(Some("bullet")), "");
+    fn the_render_script_names_its_parts() {
+        assert!(
+            render_parts()
+                .iter()
+                .any(|p| p.name == "views" && p.kinds.is_empty())
+        );
         let parts = parts_of(
-            "RENDER_VERSIONS = {\n    \"a\": (3, \"*\"),  # x\n    \"b c\": (1, \"drink tesla\"),\n}\n",
+            "RENDER_PARTS = {\n    \"a\": {\"kinds\": \"*\"},  # x\n    \"b c\": {\"kinds\": \"drink tesla\", \"changed\": True},\n}\n",
         );
         assert_eq!(
             parts[1],
             RenderPart {
                 name: "b c".into(),
-                version: 1,
                 kinds: vec!["drink".into(), "tesla".into()],
+                changed: true,
             }
         );
-        assert_eq!(parts[0].version, 3);
+        assert!(!parts[0].changed && parts[0].draws("bullet"));
+        assert!(parts[1].draws("tesla") && !parts[1].draws("bullet"));
     }
 }

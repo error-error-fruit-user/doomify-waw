@@ -2,27 +2,28 @@
 //! belong to no weapon (the zombies' voices). An alias with several variants becomes a
 //! `$random` of them, as the game picks one at random.
 
+use crate::types::{Map, Text};
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fs, path::Path};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Sound {
     /// The game's alias.
-    pub alias: String,
+    pub alias: Text,
     /// What it is for, written next to it in SNDINFO.
     #[serde(default)]
-    pub note: String,
+    pub note: Text,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SoundSet {
     /// What the set is, for SNDINFO's comments.
-    pub name: String,
+    pub name: Text,
     /// Doom sound name → where it comes from.
-    pub sounds: BTreeMap<String, Sound>,
+    pub sounds: Map<Sound>,
 }
 
 impl SoundSet {
@@ -42,7 +43,7 @@ impl SoundSet {
     }
 
     pub fn aliases(&self) -> Vec<String> {
-        self.sounds.values().map(|s| s.alias.clone()).collect()
+        self.sounds.values().map(|s| s.alias.to_string()).collect()
     }
 }
 

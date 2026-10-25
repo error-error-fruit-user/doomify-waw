@@ -3,6 +3,7 @@
 //! seconds), so a file can be checked against the game's weapon definition
 //! (`hell-hound list --kind weapon --json`); the map's `doomify.toml` scales damage for Doom.
 
+use crate::types::{List, Map, Text};
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fs, path::Path};
@@ -85,19 +86,19 @@ pub enum Kind {
     Drink,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Game {
     /// The game's weapon definition this file was made from.
-    pub weapon: String,
+    pub weapon: Text,
     /// The first-person models, hands first; the gun is hung on the hands' tag_weapon.
-    pub models: Vec<String>,
+    pub models: List<Text>,
     /// The world model, rendered for the pickup sprite.
     #[serde(default)]
-    pub world: Option<String>,
+    pub world: Option<Text>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Ammo {
     /// Rounds in the magazine (0 for weapons without one, like the knife).
@@ -124,13 +125,13 @@ fn yes() -> bool {
 /// How a projectile looks in flight and when it bursts, from sprites the map or the IWAD has
 /// (the Ray Gun's, from the map; Doom's rocket and plasma); without it a projectile is only its
 /// light and particles.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Look {
     /// A sprite name (four letters or digits) and its frames in flight, two tics each.
-    pub sprite: String,
+    pub sprite: Text,
     #[serde(default = "first_frame")]
-    pub frames: String,
+    pub frames: Text,
     #[serde(default = "one_f")]
     pub scale: f64,
     /// Grows and shrinks as it flies (the Ray Gun's).
@@ -138,29 +139,29 @@ pub struct Look {
     pub pulse: bool,
     /// A ZScript translation that recolours it (Porter's X2 Ray Gun's red).
     #[serde(default)]
-    pub translation: Option<String>,
+    pub translation: Option<Text>,
     /// The sprite and frames it bursts into, two tics each.
     #[serde(default)]
     pub burst: Option<Burst>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Burst {
-    pub sprite: String,
-    pub frames: String,
+    pub sprite: Text,
+    pub frames: Text,
     #[serde(default = "one_f")]
     pub scale: f64,
 }
 
-fn first_frame() -> String {
-    "A".into()
+fn first_frame() -> Text {
+    Text::Borrowed("A")
 }
 fn one_f() -> f64 {
     1.0
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Fire {
     /// Holding the trigger keeps firing.
@@ -192,7 +193,7 @@ pub struct Fire {
     pub arc_range: u32,
     /// The colour of the projectile's light and particles (RRGGBB).
     #[serde(default)]
-    pub color: Option<String>,
+    pub color: Option<Text>,
 }
 
 fn one() -> u32 {
@@ -202,16 +203,16 @@ fn spread() -> f64 {
     2.0
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Wall {
     /// Points to buy it off the wall.
     pub cost: u32,
     /// The chalk drawing's image in the IWDs.
-    pub chalk: String,
+    pub chalk: Text,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct View {
     /// Where the eye sits from the hip, in metres (forward, left, up); the rig's default when unset.
@@ -223,12 +224,12 @@ pub struct View {
     /// A bone of the hands to carry the model by (`j_wrist_ri`), for equipment whose clips
     /// leave `tag_weapon` behind the eye (the cymbal monkey); it keeps where each clip starts.
     #[serde(default)]
-    pub hold: Option<String>,
+    pub hold: Option<Text>,
     /// For some renders only, by render (`first_raise`): a bone to hang the model exactly on, as
     /// the game hangs a gun; the Bowie knife is a gun on `tag_weapon` in its flourish, but in the
     /// left hand when it slashes.
     #[serde(default)]
-    pub hold_in: BTreeMap<String, String>,
+    pub hold_in: Map<Text>,
     /// Equipment World at War keeps off screen until it is used: the frame of its throw (or
     /// swing) to hold it at while it is up; the frame showing most of it when unset.
     #[serde(default)]
@@ -236,29 +237,29 @@ pub struct View {
     /// The Wunderwaffe: the notetrack of its reload and first raise where its switch turns the
     /// bulbs on; before it they are dark, at it the gun jolts to life.
     #[serde(default)]
-    pub lights_on: Option<String>,
+    pub lights_on: Option<Text>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Weapon {
     /// The name players see.
-    pub name: String,
+    pub name: Text,
     /// The class name after the map's prefix (`Nacht_` + `Thompson`).
-    pub class: String,
+    pub class: Text,
     /// Two letters or digits that start every sprite of the weapon; unique across weapons.
-    pub sprite: String,
+    pub sprite: Text,
     pub kind: Kind,
     /// The weapon slot it goes in (the box gives what is in the slots); drinks have none.
     #[serde(default)]
     pub slot: u8,
     /// A drink's perk, as Horde Hammer names it: QuickRevive, Juggernog, SpeedCola or DoubleTap.
     #[serde(default)]
-    pub perk: Option<String>,
+    pub perk: Option<Text>,
     pub game: Game,
     /// The id of its Pack-a-Punched version.
     #[serde(default)]
-    pub upgrade: Option<String>,
+    pub upgrade: Option<Text>,
     /// This is a Pack-a-Punched version: never in the box.
     #[serde(default)]
     pub upgraded: bool,
@@ -270,7 +271,7 @@ pub struct Weapon {
     pub last_stand: u32,
     /// The weapon (by file name) given for the last stand instead, when this is the pistol.
     #[serde(default)]
-    pub downed: Option<String>,
+    pub downed: Option<Text>,
     /// Bought off the wall.
     #[serde(default)]
     pub wall: Option<Wall>,
@@ -278,10 +279,10 @@ pub struct Weapon {
     pub ammo: Ammo,
     pub fire: Fire,
     /// Role → animation clip.
-    pub animations: BTreeMap<String, String>,
+    pub animations: Map<Text>,
     /// Role → sound alias.
     #[serde(default)]
-    pub sounds: BTreeMap<String, String>,
+    pub sounds: Map<Text>,
     #[serde(default)]
     pub view: View,
     /// What it fires, when that is seen (projectiles and the Wunderwaffe).
@@ -351,14 +352,14 @@ impl Weapon {
         }
         for role in self.animations.keys() {
             ensure!(
-                ANIMATION_ROLES.contains(&role.as_str()),
+                ANIMATION_ROLES.contains(&role.as_ref()),
                 "unknown animation role {role:?} (known: {})",
                 ANIMATION_ROLES.join(", ")
             );
         }
         for role in self.sounds.keys() {
             ensure!(
-                SOUND_ROLES.contains(&role.as_str()),
+                SOUND_ROLES.contains(&role.as_ref()),
                 "unknown sound role {role:?} (known: {})",
                 SOUND_ROLES.join(", ")
             );
@@ -406,12 +407,12 @@ impl Weapon {
 
     /// The clip for `role`, if the weapon has one.
     pub fn clip(&self, role: &str) -> Option<&str> {
-        self.animations.get(role).map(String::as_str)
+        self.animations.get(role).map(|clip| clip.as_ref())
     }
 
     /// Every distinct clip, sorted.
     pub fn clips(&self) -> Vec<String> {
-        let mut clips: Vec<_> = self.animations.values().cloned().collect();
+        let mut clips: Vec<String> = self.animations.values().map(|c| c.to_string()).collect();
         clips.sort();
         clips.dedup();
         clips
@@ -461,7 +462,7 @@ pub fn load_all(folder: &Path) -> Result<BTreeMap<String, Weapon>> {
             bail!("{id} and {other} share the class {}", weapon.class);
         }
         if let Some(upgrade) = &weapon.upgrade {
-            let target = weapons.get(upgrade).with_context(|| {
+            let target = weapons.get(upgrade.as_ref()).with_context(|| {
                 format!("{id}'s upgrade {upgrade} has no weapons/{upgrade}.toml")
             })?;
             ensure!(

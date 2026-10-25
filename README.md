@@ -2,23 +2,33 @@
 
 > **AI notice:** this project is developed with the help of AI. Much of the code and documentation was written with [Claude](https://claude.ai) (Anthropic), working under my direction and review. Commits that Claude helped write carry a `Co-Authored-By: Claude` trailer, so you can see which ones in the history.
 
-Rebuilds the weapons and sounds of Call of Duty: World at War's **Der Riese** for UZDoom zombies maps, from **your own copy of the game, while it runs**. Nothing of World at War is in this repository or in the maps that use it: Nacht des Schreckens and Asylum ship a `doomify.py` that runs this once before you play.
+Rebuilds the weapons and sounds of Call of Duty: World at War's **Der Riese** for UZDoom zombies maps, from **your own copy of the game, while it runs**. Nothing of World at War is in this repository or in the maps that use it. It is a Rust library, `doomify`, that a map's installer is built with: Nacht des Schreckens' `install-nacht` runs it while it installs.
 
 Every Der Riese weapon comes out ready to play on [Horde Hammer](https://github.com/error-error-fruit-user/horde-hammer): the M1911 to the Wunderwaffe DG-2, the BAR to the Ray Gun, the Pack-a-Punched version of each (Mustang & Sally, the Gibs-o-matic...), the Stielhandgranate, Bouncing Betty, cymbal monkey and Bowie knife, with their wall drawings, their sounds and the zombies' voices, and the four perk bottles drunk as Der Riese drinks them (a map keeps its own machines).
 
 ## Using it
 
-You need World at War (Steam) with **Der Riese loaded in solo zombies**, and [Blender](https://www.blender.org) 4.0 or newer. On Linux the game runs through Proton; Hell Hound reads it there too.
+A map's installer builds with it: you need World at War (Steam) with **Der Riese loaded in solo zombies**, and [Blender](https://www.blender.org) 4.0 or newer. On Linux the game runs through Proton; Hell Hound reads it there too.
 
-```sh
-doomify-waw build path/to/map/doomify        # or just doomify-waw in that folder
+```toml
+[dependencies]
+doomify = { path = "../doomify-waw" }   # the checkout beside the map's (with ../hell-hound)
 ```
 
-It takes about an hour the first time: it pulls each weapon from the running game, renders it in Blender and turns the frames into sprites. What it rendered is kept in your cache (`~/.cache/doomify-waw`, `%LOCALAPPDATA%\doomify-waw` on Windows) and shared by every map, so the next map, or the next run, only redoes what changed: a weapon is keyed on what it renders, so changing how it fires doesn't render it again. A newer doomify-waw renders again only the weapons whose part of the render script changed; `doomify-waw versions` lists those versions, so an installer knows when to build again. `--force` redoes everything, `--only thompson` builds one weapon to try things out, `--wait` waits for the game to start, `--blender PATH` picks Blender.
+```rust
+// Blender's script pulls from the game by running this program again with --script
+if let Some(position) = args.iter().position(|arg| arg == "--script") { /* doomify::script::run(...) */ }
+let project = doomify::project::Project::load(Path::new("doomify"))?;
+doomify::pipeline::build(&project, &doomify::pipeline::Options::default())?;
+```
+
+`Project::load` reads the map's `doomify.toml` and its weapon and sound set TOMLs; `pipeline::build` makes the pk3 folder (and packs it, with `pack` in `doomify.toml`). `Options` says what to redo (`force`), which weapons (`only`), whether to `wait` for the game, which Blender, and how to say what it does (`say`, `run`, printed by default). [`const_toml!`](src/const_toml.rs) builds a map's TOMLs into its installer as consts of these types (a build script with `doomify` as a build dependency reads each with serde and writes the Rust that builds it, into the build's `OUT_DIR`), so the installer can put them in place and tell when an installed one differs; `FINGERPRINT` marks doomify's own source, so it knows when what doomify builds may have changed.
+
+It takes about an hour the first time: it pulls each weapon from the running game, renders it in Blender and turns the frames into sprites. What it rendered is kept in your cache (`~/.cache/doomify-waw`, `%LOCALAPPDATA%\doomify-waw` on Windows) and shared by every map, so the next map, or the next run, only redoes what changed: a weapon is keyed on what it renders, so changing how it fires doesn't render it again, and when everything is in the cache, neither World at War nor Blender is needed. A change to the render script renders nothing again unless its part in `RENDER_PARTS` (at the top of `blender/render.py`) is flagged `"changed": True`: then the weapons that part draws are rendered again, once.
 
 ## How it works
 
-1. **Pull** (`doomify-waw --script weapons/thompson.toml --out DIR`): the TOML says what to take from the game, and [Hell Hound](https://github.com/error-error-fruit-user/hell-hound) reads it from the game's memory and IWDs: the first-person models and clips as one GLB (the gun hung on the hands), the world model, the chalk drawing, and every sound: the TOML's, and every sound the clips' notetracks play (a reload's magazine out and in). A sound set's TOML (`sounds/zombie.toml`) pulls the zombies' voices the same way.
+1. **Pull** (`--script weapons/thompson.toml --out DIR`, in the program doomify is built into): the TOML says what to take from the game, and [Hell Hound](https://github.com/error-error-fruit-user/hell-hound) reads it from the game's memory and IWDs: the first-person models and clips as one GLB (the gun hung on the hands), the world model, the chalk drawing, and every sound: the TOML's, and every sound the clips' notetracks play (a reload's magazine out and in). A sound set's TOML (`sounds/zombie.toml`) pulls the zombies' voices the same way.
 2. **Render** (Blender, `blender/render.py` in `blender/weapon.blend`): the Blender script runs those pulls itself with `--script`, converts the sounds Doom can't play (MS ADPCM, xWMA) to Ogg Vorbis, and renders every animation at **35 frames a second**, Doom's tic rate, from the player's eye. `weapon.blend` is dark and brooding: a near-black violet world, a warm key light that keeps the textures' colours, a cold cyan rim that cuts the weapon out of the dark, a faint violet underneath. Its compositor gives every sprite a **one-pixel dark border**. The canvas is wider than Doom's 4:3 screen (480 by 224 of Doom's tall pixels), so weapons are whole on **wide screens up to 21:9**, with room below for bobbing.
 3. **Sprites**: every frame is offset for Doom's weapon screen and cropped with [putpng](https://crates.io/crates/putpng), empty ones are left out.
 4. **Code**: the ZScript, SNDINFO, MAPINFO and KEYCONF are built with a builder (`src/code.rs`) that reads like the decisions behind it: `.always(...)` adds text, `.when(condition, ...)` adds it if the condition holds, `.otherwise_when(...)` and `.otherwise(...)` finish the chain like `else if` and `else`. The text itself is formatted multiline strings (`indoc::formatdoc!`).
@@ -40,7 +50,7 @@ World at War layers its viewmodel animations: a clip (fire, reload) never moves 
 
 ## For a map
 
-`doomify-waw init path/to/map/doomify --prefix Nacht --output ../nacht-waw` writes a `doomify.toml` and the default weapons and sound sets, which the map then owns:
+A map keeps a folder with a `doomify.toml` and its own copies of the weapons and sound sets (the defaults are `weapons/` and `sounds/` here, and `doomify::DEFAULTS` in the library):
 
 - `doomify.toml`: the class prefix (`Nacht_Thompson`), the pk3 folder to write (replaced on every run; it holds a `DOOMIFY.txt` so nothing else is ever deleted), the damage scale (World at War's damage times this; Horde Hammer's zombies have less health), the map's own pk3 folders (so sprite names never clash) and the wall drawings' editor numbers.
 - `weapons/<id>.toml`: one per weapon (or perk bottle), with World at War's own numbers, read from the running game (`hell-hound list --kind weapon --json`): what to pull, the slot, box weight, last stand rank, wall cost and chalk, ammo, fire time, damage, spread, the clip of every role (`idle`, `fire`, `reload`, `ads_up`...) and the sound of every role.
@@ -56,7 +66,7 @@ The generated pk3 folder is loaded **after** the map. The map's player starts wi
 cargo build --release
 ```
 
-It is built against a [Hell Hound](https://github.com/error-error-fruit-user/hell-hound) checkout next to it (`../hell-hound`). `blender/weapon.blend` is made by `blender -b --factory-startup --python blender/make_blend.py -- blender/weapon.blend`; the scene and `blender/render.py` are built into the executable, and a change to either renders everything again.
+It is a library (`cargo test`), built against a [Hell Hound](https://github.com/error-error-fruit-user/hell-hound) checkout next to it (`../hell-hound`). `blender/weapon.blend` is made by `blender -b --factory-startup --python blender/make_blend.py -- blender/weapon.blend`; the scene and `blender/render.py` are built into the library. A new scene renders everything again; a change to the script, only what its flagged parts draw.
 
 ## Licensing
 

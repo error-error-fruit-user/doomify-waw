@@ -595,11 +595,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "doomify-waw"
+name = "doomify"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap",
  "color_quant",
  "glob",
  "hell-hound",

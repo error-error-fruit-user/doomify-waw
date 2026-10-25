@@ -1,13 +1,13 @@
-"""doomify-waw's Blender side: pulls weapons and sounds from the running game and renders them.
+"""doomify's Blender side: pulls weapons and sounds from the running game and renders them.
 
-doomify-waw runs it with weapon.blend open, both written next to a job file:
+doomify runs it with weapon.blend open, both written next to a job file:
 
     blender -b weapon.blend --python render.py -- --job job.json
 
 For each sound set and weapon in the job it:
 
-1. pulls what the item's TOML names from the game with doomify-waw's own `--script` mode
-   (`doomify-waw --script weapons/thompson.toml --out work/pull/thompson`): the first-person
+1. pulls what the item's TOML names from the game with the `--script` mode of the program doomify
+   is built into (`install-nacht --script weapons/thompson.toml --out work/pull/thompson`): the first-person
    models and clips as view.glb, the world model as world.glb, and the sounds;
 2. converts the sounds Doom can't play (MS ADPCM, xWMA) to Ogg Vorbis;
 3. renders every animation the job asks for, at 35 frames a second, from the player's eye, into
@@ -39,12 +39,13 @@ PIXEL_ASPECT = 1.2
 # Where the lights in weapon.blend aim; the world model is moved there for its picture.
 GUN = (0.45, -0.08, -0.12)
 
-# The versions of this script's parts, which doomify-waw reads (one part to a line): raise a
-# part's when a change to it changes the frames it draws, so only the weapons of its kinds ("*"
-# for every weapon) are rendered again, and installs build their weapons again.
-RENDER_VERSIONS = {
-    "views": (2, "*"),  # the scene, the views and the world model's picture
-    "bottle glass": (2, "drink"),  # see_through: a perk bottle's glass shows its drink
+# This script's parts, which doomify reads (one to a line): the weapon kinds each draws ("*" for
+# every weapon), and "changed": True on a part changed so that it draws them differently: the
+# weapons it draws are rendered again, once (doomify notes the script each was rendered with).
+# Other changes render nothing again. Take the flag off once the change is out.
+RENDER_PARTS = {
+    "views": {"kinds": "*"},  # the scene, the views and the world model's picture
+    "bottle glass": {"kinds": "drink", "changed": True},  # see_through: a perk bottle's glass shows its drink
 }
 
 
@@ -61,7 +62,7 @@ def argument(name):
 
 
 def pull(job, item):
-    """Runs doomify-waw's --script mode for the item, unless its pull is already there."""
+    """Runs doomify's --script mode (in the program that runs this) for the item, unless its pull is already there."""
     done = os.path.join(item["pull"], "pull.json")
     if os.path.exists(done) and not item.get("force"):
         return
@@ -340,7 +341,7 @@ def render_views(weapon, scene, objects, rig, done):
         count = 1 if item.get("still") else max(1, int(math.floor(span + 1e-4)) + 1)
         count = item.get("frames") or count
         done[name] = count
-        if finished(folder, count) and not weapon.get("force"):
+        if finished(folder, count) and not (weapon.get("force") or weapon.get("rerender")):
             continue
         if mode == "zoom_in":
             combined = layered(base, action(rig, stance["in"]), None)
@@ -384,7 +385,7 @@ def render_world(weapon, scene, done):
     if not os.path.exists(path):
         return
     done["world"] = 1
-    if finished(folder, 1) and not weapon.get("force"):
+    if finished(folder, 1) and not (weapon.get("force") or weapon.get("rerender")):
         return
     for obj in bpy.data.collections["Weapon"].objects:
         obj.hide_render = True

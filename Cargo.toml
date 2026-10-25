@@ -1,15 +1,14 @@
 [package]
-name = "doomify-waw"
+name = "doomify"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
 build = "build.rs"
-description = "Rebuilds World at War's Der Riese weapons and sounds for UZDoom maps from the player's own running game"
+description = "A library that rebuilds World at War's Der Riese weapons and sounds for UZDoom maps from the player's own running game"
 license = "0BSD"
 
 [dependencies]
 anyhow = "1"
-clap = { version = "4.5", features = ["derive"] }
 color_quant = "1"
 glob = "0.3"
 # The hell-hound checkout next to this one (a git dependency once it is published)
@@ -23,7 +22,3 @@ serde_json = "1"
 tempfile = "3"
 toml = "0.8"
 zip = { version = "2.4", default-features = false, features = ["deflate"] }
-
-[profile.release]
-lto = true
-strip = true
