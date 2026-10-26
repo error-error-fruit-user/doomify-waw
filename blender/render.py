@@ -45,7 +45,7 @@ GUN = (0.45, -0.08, -0.12)
 # Other changes render nothing again. Take the flag off once the change is out.
 RENDER_PARTS = {
     "views": {"kinds": "*"},  # the scene, the views and the world model's picture
-    "bottle glass": {"kinds": "drink", "changed": True},  # see_through: a perk bottle's glass shows its drink
+    "bottle glass": {"kinds": "drink", "changed": True},  # see_through: a perk bottle's glass shows its drink, and its open neck is whole
 }
 
 
@@ -132,9 +132,15 @@ def see_through(objects):
     """Glass (a perk bottle's outside, the Wunderwaffe's tubes) lets what is inside show, as
     its texture's alpha says; the importer makes every material opaque."""
     for obj in objects:
+        bottle = any(slot.material and slot.material.name.lower().endswith("_out")
+                     for slot in getattr(obj, "material_slots", []))
         for slot in getattr(obj, "material_slots", []):
             material = slot.material
             name = material.name.lower() if material else ""
+            # a perk bottle is seen into once its cap is off: its glass and the drink in it are
+            # drawn from both sides, so its lip and the inside of its neck are never a hole
+            if material is not None and bottle and (name.endswith("_out") or name.endswith("_in")):
+                material.use_backface_culling = False
             if material is None or not material.use_nodes or not ("glass" in name or name.endswith("_out")):
                 continue
             nodes, links = material.node_tree.nodes, material.node_tree.links
