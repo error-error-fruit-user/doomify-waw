@@ -53,8 +53,9 @@ const WEAPON_OFFSET: (i32, i32) = (80, 32);
 /// Specks smaller than this (in pixels, their border included) are dropped: thin parts like the
 /// Wunderwaffe's coil wires break up into them at sprite size.
 const SPECK: usize = 10;
-/// Wall drawings are scaled to this width and drawn at half size.
-const CHALK_WIDTH: u32 = 128;
+/// Wall drawings are scaled down by this, every one alike, so each keeps the size World at War
+/// gives it (a grenade bag's 256 pixels are half a rifle's 512), and drawn at half size.
+const CHALK_SHRINK: u32 = 4;
 
 pub struct Sprites {
     crc: Crc32,
@@ -245,8 +246,8 @@ impl Sprites {
         let (width, height) = source.dimensions();
         let scaled = imageops::resize(
             &source.to_rgba8(),
-            CHALK_WIDTH,
-            (height * CHALK_WIDTH / width).max(1),
+            (width / CHALK_SHRINK).max(1),
+            (height / CHALK_SHRINK).max(1),
             imageops::FilterType::Lanczos3,
         );
         let name = self.next_page()?;
