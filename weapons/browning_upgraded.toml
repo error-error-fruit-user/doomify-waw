@@ -1,7 +1,7 @@
 # B115 accelerator: Der Riese's zombie_30cal_upgraded. Numbers are World at War's own,
 # read from the running game (hell-hound list --kind weapon --json); damage is scaled by the map.
 name = "B115 accelerator"
-class = "B115Accelerator"
+class = "BrowningM1919Upgraded"
 sprite = "B2"
 kind = "bullet"
 slot = 5

@@ -1,7 +1,7 @@
 # C-3000 b1at-ch35: Der Riese's zombie_colt_upgraded. Numbers are World at War's own,
 # read from the running game (hell-hound list --kind weapon --json); damage is scaled by the map.
 name = "C-3000 b1at-ch35"
-class = "MustangAndSally"
+class = "ColtUpgraded"
 sprite = "C1"
 kind = "projectile"
 slot = 1

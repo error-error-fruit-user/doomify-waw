@@ -1,7 +1,7 @@
 # FIW Nitrogen cooled: Der Riese's m2_flamethrower_zombie_upgraded. Numbers are World at War's own,
 # read from the running game (hell-hound list --kind weapon --json); damage is scaled by the map.
 name = "FIW Nitrogen cooled"
-class = "NitrogenFlamethrower"
+class = "FlamethrowerUpgraded"
 sprite = "F2"
 kind = "flame"
 slot = 6

@@ -469,7 +469,31 @@ pub fn load_all(folder: &Path) -> Result<BTreeMap<String, Weapon>> {
                 target.upgraded,
                 "{id}'s upgrade {upgrade} must say upgraded = true"
             );
+            // an upgrade's class is its weapon's, upgraded (Colt → ColtUpgraded)
+            ensure!(
+                *target.class == format!("{}Upgraded", weapon.class),
+                "{id}'s upgrade {upgrade} must have class = \"{}Upgraded\", not {:?}",
+                weapon.class,
+                target.class
+            );
         }
     }
     Ok(weapons)
+}
+
+#[cfg(test)]
+mod defaults_tests {
+    use super::*;
+
+    #[test]
+    fn the_default_weapons_load_their_upgrades_named_after_them() {
+        let weapons = load_all(&Path::new(env!("CARGO_MANIFEST_DIR")).join("weapons")).unwrap();
+        assert_eq!(weapons["colt_upgraded"].class, "ColtUpgraded");
+        assert!(
+            weapons
+                .values()
+                .filter(|weapon| weapon.upgraded)
+                .all(|weapon| weapon.class.ends_with("Upgraded"))
+        );
+    }
 }

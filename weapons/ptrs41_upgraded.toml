@@ -1,7 +1,7 @@
 # The Penetrator: Der Riese's ptrs41_zombie_upgraded. Numbers are World at War's own,
 # read from the running game (hell-hound list --kind weapon --json); damage is scaled by the map.
 name = "The Penetrator"
-class = "Penetrator"
+class = "Ptrs41Upgraded"
 sprite = "P1"
 kind = "bullet"
 slot = 2

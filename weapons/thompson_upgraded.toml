@@ -1,7 +1,7 @@
 # Gibs-o-matic: Der Riese's zombie_thompson_upgraded. Numbers are World at War's own,
 # read from the running game (hell-hound list --kind weapon --json); damage is scaled by the map.
 name = "Gibs-o-matic"
-class = "GibsOMatic"
+class = "ThompsonUpgraded"
 sprite = "T1"
 kind = "bullet"
 slot = 3

@@ -1,7 +1,7 @@
 # Spatz-447 +: Der Riese's zombie_stg44_upgraded. Numbers are World at War's own,
 # read from the running game (hell-hound list --kind weapon --json); damage is scaled by the map.
 name = "Spatz-447 +"
-class = "Spatz447"
+class = "Stg44Upgraded"
 sprite = "S2"
 kind = "bullet"
 slot = 3

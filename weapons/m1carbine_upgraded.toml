@@ -1,7 +1,7 @@
 # Widdershins RC-1: Der Riese's zombie_m1carbine_upgraded. Numbers are World at War's own,
 # read from the running game (hell-hound list --kind weapon --json); damage is scaled by the map.
 name = "Widdershins RC-1"
-class = "Widdershins"
+class = "M1CarbineUpgraded"
 sprite = "C2"
 kind = "bullet"
 slot = 2

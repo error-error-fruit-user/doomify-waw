@@ -1,7 +1,7 @@
 # Porter's X2 Ray Gun: Der Riese's ray_gun_upgraded. Numbers are World at War's own,
 # read from the running game (hell-hound list --kind weapon --json); damage is scaled by the map.
 name = "Porter's X2 Ray Gun"
-class = "PortersRayGun"
+class = "RayGunUpgraded"
 sprite = "R2"
 kind = "projectile"
 slot = 7

@@ -1,7 +1,7 @@
 # G115 Compressor: Der Riese's zombie_gewehr43_upgraded. Numbers are World at War's own,
 # read from the running game (hell-hound list --kind weapon --json); damage is scaled by the map.
 name = "G115 Compressor"
-class = "G115Compressor"
+class = "Gewehr43Upgraded"
 sprite = "G1"
 kind = "bullet"
 slot = 2
