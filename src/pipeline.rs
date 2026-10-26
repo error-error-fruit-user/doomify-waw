@@ -128,15 +128,32 @@ pub fn build(project: &Project, options: &Options) -> Result<()> {
         ));
     }
     if !options.offline && !cached {
-        let game = Game::find(options.pid, options.wait)?;
-        game.require_weapons(
-            ids.iter()
-                .map(|id| project.weapons[id].game.weapon.as_ref()),
-        )?;
+        // 🎮 the game only for what isn't pulled yet: what is only rendered again (a changed part
+        // of the render script) needs Blender alone
+        let unpulled: Vec<&String> = ids
+            .iter()
+            .filter(|id| options.force || !pull(&weapon_key(id)).join("pull.json").is_file())
+            .collect();
+        let sounds_unpulled = project
+            .sound_sets
+            .keys()
+            .any(|id| options.force || !pull(&sound_key(id)).join("pull.json").is_file());
+        let game = if unpulled.is_empty() && !sounds_unpulled {
+            say("Everything is pulled already: only rendering again, so World at War isn't needed");
+            None
+        } else {
+            let game = Game::find(options.pid, options.wait)?;
+            game.require_weapons(
+                unpulled
+                    .iter()
+                    .map(|id| project.weapons[*id].game.weapon.as_ref()),
+            )?;
+            Some(game)
+        };
         let exe = std::env::current_exe()?;
         let job = json!({
             "doomify": exe,
-            "pid": game.pid,
+            "pid": game.as_ref().map(|game| game.pid),
             "sounds": project.sound_sets.keys().map(|id| json!({
                 "id": format!("sounds-{id}"),
                 "script": project.sound_file(id).canonicalize().unwrap_or(project.sound_file(id)),
