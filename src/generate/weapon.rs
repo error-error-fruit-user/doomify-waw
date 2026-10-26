@@ -985,7 +985,8 @@ fn melee_file(project: &Project, built: &Built, header: String) -> String {
                     if (self.owner == null || self.owner.FindInventory('{class}Kick') != null) {{
                         return;
                     }}
-                    let kick = self.owner.FindInventory('HH_KickItem');
+                    // the map's own kick too, a subclass replacing Horde Hammer's
+                    let kick = self.owner.FindInventory('HH_KickItem', true);
                     if (kick != null) {{
                         kick.Destroy();
                     }}
