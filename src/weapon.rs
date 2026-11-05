@@ -98,7 +98,7 @@ pub struct Game {
     pub world: Option<Text>,
     /// An animation of the world model, played on it where it lies once thrown or planted (the
     /// cymbal monkey's clapping); the sounds its notetracks name play with it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub world_animation: Option<Text>,
 }
 
