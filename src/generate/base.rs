@@ -544,15 +544,19 @@ pub fn weapon(p: &str) -> String {
         }}
 
         // The cymbal monkey: lands, plays its cymbals and every zombie near comes to it, then it
-        // goes off
+        // goes off. A monkey whose Death plays its own animation, with its sounds, has no
+        // cymbals of its own (CymbalTics 0).
         class {p}_DoomifyMonkey : {p}_DoomifyThrown {{
             meta int lure;              // how far zombies hear it
+            meta int cymbalTics;        // tics between its cymbals; 0 for none
 
             property Lure: lure;
+            property CymbalTics: cymbalTics;
 
             Default {{
                 {p}_DoomifyThrown.Fuse 245;
                 {p}_DoomifyMonkey.Lure 1600;
+                {p}_DoomifyMonkey.CymbalTics 12;
                 +SHOOTABLE
                 +NODAMAGE
                 +NOBLOOD
@@ -566,7 +570,7 @@ pub fn weapon(p: &str) -> String {
                 if (self.bDestroyed || self.health <= 0 || self.reactionTime <= 0) {{
                     return;
                 }}
-                if (self.reactionTime % 12 == 0) {{
+                if (self.cymbalTics > 0 && self.reactionTime % self.cymbalTics == 0) {{
                     self.A_StartSound("waw/monk_cymb_m", CHAN_AUTO);
                 }}
                 // Horde Hammer sends zombies back after players; the monkey calls them every tic
@@ -666,11 +670,11 @@ pub fn shock(p: &str) -> String {
                 let player = players[consolePlayer];
                 let weapon = {p}_DoomifyWeapon(player.ReadyWeapon);
                 if (weapon != null && weapon.joltTics > 0) {{
-                    Shader.SetEnabled(player, "{p}_Shock", true);
-                    Shader.SetUniform1f(player, "{p}_Shock", "strength", double(weapon.joltTics) / {p}_DoomifyWeapon.JOLT_TICS);
-                    Shader.SetUniform1f(player, "{p}_Shock", "shockTime", level.maptime / double(TICRATE));
+                    PPShader.SetEnabled("{p}_Shock", true);
+                    PPShader.SetUniform1f("{p}_Shock", "strength", double(weapon.joltTics) / {p}_DoomifyWeapon.JOLT_TICS);
+                    PPShader.SetUniform1f("{p}_Shock", "shockTime", level.maptime / double(TICRATE));
                 }} else {{
-                    Shader.SetEnabled(player, "{p}_Shock", false);
+                    PPShader.SetEnabled("{p}_Shock", false);
                 }}
             }}
         }}

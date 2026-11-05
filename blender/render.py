@@ -30,12 +30,14 @@ import aud
 import bpy
 
 FPS = 35
-WIDTH = 480
-SCREEN_WIDTH = 320
+WIDTH, HEIGHT = 480, 224
+SCREEN_WIDTH, SCREEN_HEIGHT = 320, 200
 TORSO = "tag_torso"
 # Pickup sprites: pixels per metre (Horde Hammer draws pickups at half size).
 PICKUP_PPM = 130
 PIXEL_ASPECT = 1.2
+# A thrown thing turns through the air in this many pictures, a whole turn.
+TUMBLE_FRAMES = 8
 # Where the lights in weapon.blend aim; the world model is moved there for its picture.
 GUN = (0.45, -0.08, -0.12)
 
@@ -45,7 +47,9 @@ GUN = (0.45, -0.08, -0.12)
 # Other changes render nothing again. Take the flag off once the change is out.
 RENDER_PARTS = {
     "views": {"kinds": "*"},  # the scene, the views and the world model's picture
-    "bottle glass": {"kinds": "drink", "changed": True},  # see_through: a perk bottle's glass shows its drink, and its open neck is whole
+    "bottle glass": {"kinds": "drink"},  # see_through: a perk bottle's glass shows its drink, and its open neck is whole
+    "headroom": {"kinds": "grenade monkey mine melee", "changed": True},  # canvas: equipment's views rendered with room above the screen
+    "thrown": {"kinds": "grenade monkey mine"},  # render_world: tumbling, lying on the floor and the world model's animation
 }
 
 
@@ -330,8 +334,20 @@ def hold(rig, bone, exact):
     constraint.inverse_matrix = (rig.matrix_world @ rig.pose.bones[bone].matrix).inverted()
 
 
+def canvas(scene, camera, headroom):
+    """The weapon canvas with `headroom` pixels above the 4:3 screen: equipment World at War
+    throws or swings from high up would be cut flat at the screen's top, and that edge shows as
+    soon as the weapon bobs. The screen stays where it was in the canvas's lower part, and
+    straight ahead stays its middle."""
+    height = HEIGHT + headroom
+    scene.render.resolution_x = WIDTH
+    scene.render.resolution_y = height
+    camera.shift_y = -(height / 2 - (headroom + SCREEN_HEIGHT / 2)) * PIXEL_ASPECT / WIDTH
+
+
 def render_views(weapon, scene, objects, rig, done):
     view = scene.camera
+    canvas(scene, view.data, weapon.get("headroom") or 0)
     hip_fov = view.get("hip_fov", 65.0)
     ads_fov = weapon.get("ads_fov") or hip_fov
     stance = weapon.get("stance") or {}
@@ -384,41 +400,127 @@ def render_views(weapon, scene, objects, rig, done):
         bpy.data.actions.remove(combined)
 
 
+def bounds(objects):
+    corners = [obj.matrix_world @ v.co for obj in objects if obj.type == "MESH" for v in obj.data.vertices]
+    low = [min(c[i] for c in corners) for i in range(3)]
+    high = [max(c[i] for c in corners) for i in range(3)]
+    return low, high
+
+
+def side_picture(scene, centre, width, height, lift=0.0):
+    """Points the side camera at `centre` (x, z), raised by `lift` metres, over `width` by
+    `height` metres."""
+    side = bpy.data.objects["Side"]
+    side.data.sensor_fit = "HORIZONTAL"
+    scene.render.resolution_x = math.ceil(width * PICKUP_PPM) + 4
+    scene.render.resolution_y = math.ceil(height * PICKUP_PPM / PIXEL_ASPECT) + 4
+    side.data.ortho_scale = scene.render.resolution_x / PICKUP_PPM
+    side.data.shift_x = side.data.shift_y = 0
+    side.location = (centre[0], GUN[1] - 5, centre[1] + lift)
+    scene.camera = side
+
+
+def still(scene, folder, index):
+    os.makedirs(folder, exist_ok=True)
+    scene.render.filepath = os.path.join(folder, f"{index:04}.png")
+    bpy.ops.render.render(write_still=True)
+
+
+def turn(roots, start, angle):
+    """Turns the model about GUN, in the picture's plane, `angle` degrees from where it was."""
+    from mathutils import Matrix
+
+    pivot = Matrix.Translation(GUN)
+    spin = pivot @ Matrix.Rotation(math.radians(angle), 4, "Y") @ pivot.inverted()
+    for obj, matrix in zip(roots, start):
+        obj.matrix_world = spin @ matrix
+    bpy.context.view_layer.update()
+
+
 def render_world(weapon, scene, done):
-    """The world model from its right side, for the pickup sprite."""
+    """The world model from its right side, for the pickup sprite, and what weapon["world_renders"]
+    asks besides: `tumble`, turning through the air in eighths, about its middle; `floor`, lying
+    on its side; `world_idle`, its animation (weapon["world_clip"]) where it lies."""
     path = os.path.join(weapon["pull"], "world.glb")
-    folder = os.path.join(weapon["frames"], "world")
     if not os.path.exists(path):
         return
-    done["world"] = 1
-    if finished(folder, 1) and not (weapon.get("force") or weapon.get("rerender")):
-        return
+    wanted = weapon.get("world_renders") or ["world"]
+    again = weapon.get("force") or weapon.get("rerender")
     for obj in bpy.data.collections["Weapon"].objects:
         obj.hide_render = True
     collection = bpy.data.collections.new("World")
     scene.collection.children.link(collection)
     objects = import_glb(path, collection)
     bpy.context.view_layer.update()
-    corners = [obj.matrix_world @ v.co for obj in objects if obj.type == "MESH" for v in obj.data.vertices]
-    low = [min(c[i] for c in corners) for i in range(3)]
-    high = [max(c[i] for c in corners) for i in range(3)]
+    low, high = bounds(objects)
     centre = [(a + b) / 2 for a, b in zip(low, high)]
-    for obj in objects:
-        if obj.parent is None:
-            obj.location = [obj.location[i] + GUN[i] - centre[i] for i in range(3)]
+    roots = [obj for obj in objects if obj.parent is None]
+    for obj in roots:
+        obj.location = [obj.location[i] + GUN[i] - centre[i] for i in range(3)]
+    bpy.context.view_layer.update()
+    start = [obj.matrix_world.copy() for obj in roots]
     width, height = high[0] - low[0], high[2] - low[2]
-    side = bpy.data.objects["Side"]
-    side.location = (GUN[0], GUN[1] - 5, GUN[2])
-    side.data.sensor_fit = "HORIZONTAL"
-    scene.render.resolution_x = math.ceil(width * PICKUP_PPM) + 4
-    scene.render.resolution_y = math.ceil(height * PICKUP_PPM / PIXEL_ASPECT) + 4
-    side.data.ortho_scale = scene.render.resolution_x / PICKUP_PPM
-    scene.camera = side
-    os.makedirs(folder, exist_ok=True)
     scene.frame_start = scene.frame_end = 0
-    scene.render.filepath = os.path.join(folder, "####")
-    say("rendering", weapon["id"], "pickup")
-    bpy.ops.render.render(animation=True)
+    scene.frame_set(0)
+
+    folder = os.path.join(weapon["frames"], "world")
+    done["world"] = 1
+    if again or not finished(folder, 1):
+        side_picture(scene, (GUN[0], GUN[2]), width, height)
+        say("rendering", weapon["id"], "pickup")
+        still(scene, folder, 0)
+
+    if "tumble" in wanted:
+        folder = os.path.join(weapon["frames"], "tumble")
+        frames = TUMBLE_FRAMES
+        done["tumble"] = frames
+        if again or not finished(folder, frames):
+            across = math.hypot(width, height)
+            side_picture(scene, (GUN[0], GUN[2]), across, across)
+            say("rendering", weapon["id"], "tumbling", frames, "frames")
+            for index in range(frames):
+                turn(roots, start, index * 360 / frames)
+                still(scene, folder, index)
+            turn(roots, start, 0)
+
+    if "floor" in wanted:
+        folder = os.path.join(weapon["frames"], "floor")
+        done["floor"] = 1
+        if again or not finished(folder, 1):
+            # on its side: its long way along the floor
+            turn(roots, start, 90 if height > width else 0)
+            low, high = bounds(objects)
+            side_picture(scene, ((low[0] + high[0]) / 2, (low[2] + high[2]) / 2),
+                         high[0] - low[0], high[2] - low[2])
+            say("rendering", weapon["id"], "lying on the floor")
+            still(scene, folder, 0)
+            turn(roots, start, 0)
+
+    clip = weapon.get("world_clip")
+    if "world_idle" in wanted and clip:
+        rigs = [o for o in objects if o.type == "ARMATURE"]
+        if len(rigs) != 1:
+            raise RuntimeError(f"expected one armature in the world model, found {len(rigs)}")
+        rig = rigs[0]
+        if rig.animation_data is None:
+            rig.animation_data_create()
+        for track in list(rig.animation_data.nla_tracks):
+            rig.animation_data.nla_tracks.remove(track)
+        moving = action(rig, clip)
+        rig.animation_data.action = moving
+        count = max(1, int(math.floor(moving.frame_range[1] - moving.frame_range[0] + 1e-4)) + 1)
+        folder = os.path.join(weapon["frames"], "world_idle")
+        done["world_idle"] = count
+        if again or not finished(folder, count):
+            # one canvas for every frame, standing where the pickup does, with room around for
+            # what it waves about (the monkey's cymbals); its feet are the canvas's bottom
+            room = 0.4 * max(width, height)
+            side_picture(scene, (GUN[0], GUN[2]), width + 2 * room, height + room, lift=room / 2)
+            scene.frame_start, scene.frame_end = 0, count - 1
+            scene.render.filepath = os.path.join(folder, "####")
+            os.makedirs(folder, exist_ok=True)
+            say("rendering", weapon["id"], "its animation", clip, count, "frames")
+            bpy.ops.render.render(animation=True)
 
 
 def render_weapon(weapon, blend):

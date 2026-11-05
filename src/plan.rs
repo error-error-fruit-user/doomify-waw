@@ -87,6 +87,41 @@ pub fn variant(base: &str, lit: Option<u32>) -> String {
     }
 }
 
+/// Pixels of canvas rendered above Doom's 320x200 weapon screen for equipment: World at War
+/// throws, plants and swings it from high up, and a frame cut at the screen's top edge shows
+/// that edge as soon as the weapon bobs or comes up.
+pub const HEADROOM: u32 = 64;
+
+/// The canvas above the screen a weapon's views are rendered with (`HEADROOM` for equipment).
+pub fn headroom(weapon: &Weapon) -> u32 {
+    if weapon.thrown() || weapon.kind == Kind::Melee {
+        HEADROOM
+    } else {
+        0
+    }
+}
+
+/// The pictures of the world model a weapon has besides its pickup (`world`): what is thrown
+/// tumbles through the air (`tumble`), a grenade lies on its side where it lands (`floor`), and
+/// one with a world animation plays it where it lies (`world_idle`).
+pub fn world_renders(weapon: &Weapon) -> Vec<&'static str> {
+    let mut names = vec![];
+    if weapon.game.world.is_none() {
+        return names;
+    }
+    names.push("world");
+    if matches!(weapon.kind, Kind::Grenade | Kind::Monkey) {
+        names.push("tumble");
+    }
+    if weapon.kind == Kind::Grenade {
+        names.push("floor");
+    }
+    if weapon.game.world_animation.is_some() {
+        names.push("world_idle");
+    }
+    names
+}
+
 pub fn renders(weapon: &Weapon) -> Vec<Render> {
     let mut renders = vec![];
     let clip = |role: &str| weapon.clip(role).map(str::to_owned);
@@ -321,6 +356,24 @@ mod tests {
                 .iter()
                 .any(|n| n.starts_with("empty_zoom") || n == "ads_last_fire")
         );
+    }
+
+    #[test]
+    fn equipment_is_rendered_with_room_above_and_lies_in_the_world() {
+        let gun = weapon(&format!("kind = \"bullet\"\n{BASE}"));
+        assert_eq!(headroom(&gun), 0);
+        assert!(world_renders(&gun).is_empty());
+        let grenade = weapon(&format!("kind = \"grenade\"\n{BASE}").replace(
+            "models = [\"hands\", \"gun\"]",
+            "models = [\"hands\", \"gun\"]\nworld = \"w\"",
+        ));
+        assert_eq!(headroom(&grenade), HEADROOM);
+        assert_eq!(world_renders(&grenade), ["world", "tumble", "floor"]);
+        let monkey = weapon(&format!("kind = \"monkey\"\n{BASE}").replace(
+            "models = [\"hands\", \"gun\"]",
+            "models = [\"hands\", \"gun\"]\nworld = \"w\"\nworld_animation = \"clap\"",
+        ));
+        assert_eq!(world_renders(&monkey), ["world", "tumble", "world_idle"]);
     }
 
     #[test]

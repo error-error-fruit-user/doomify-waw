@@ -57,6 +57,15 @@ const SPECK: usize = 10;
 /// gives it (a grenade bag's 256 pixels are half a rifle's 512), and drawn at half size.
 const CHALK_SHRINK: u32 = 4;
 
+/// Where a picture of the world model hangs from the thing that shows it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Anchor {
+    /// Its bottom's middle is on the floor: it stands or lies there.
+    Feet,
+    /// Its middle is the thing's: it turns about it, flying.
+    Middle,
+}
+
 pub struct Sprites {
     crc: Crc32,
     folder: PathBuf,
@@ -192,8 +201,29 @@ impl Sprites {
         )
     }
 
-    /// The frames of one render (`folder` holds `0000.png`...; `count` of them) as a sequence.
-    pub fn sequence(&mut self, folder: &Path, count: usize) -> Result<Vec<Frame>> {
+    /// The frames of one render (`folder` holds `0000.png`...; `count` of them) as a sequence,
+    /// rendered with `headroom` pixels of canvas above the weapon screen.
+    pub fn sequence(&mut self, folder: &Path, count: usize, headroom: u32) -> Result<Vec<Frame>> {
+        let offset = (WEAPON_OFFSET.0, WEAPON_OFFSET.1 + headroom as i32);
+        self.cut(folder, count, |_| offset)
+    }
+
+    /// Pictures of the world model, all on one canvas (`folder`'s `0000.png`..., `count` of
+    /// them), held up by `anchor`.
+    pub fn pictures(&mut self, folder: &Path, count: usize, anchor: Anchor) -> Result<Vec<Frame>> {
+        self.cut(folder, count, |(width, height)| match anchor {
+            Anchor::Feet => (width as i32 / 2, height as i32),
+            Anchor::Middle => (width as i32 / 2, height as i32 / 2),
+        })
+    }
+
+    /// Cuts renders into a sequence, each offset as `offset` says for its size.
+    fn cut(
+        &mut self,
+        folder: &Path,
+        count: usize,
+        offset: impl Fn((u32, u32)) -> (i32, i32),
+    ) -> Result<Vec<Frame>> {
         let mut names = vec![];
         let mut frames = vec![];
         for index in 0..count {
@@ -211,7 +241,7 @@ impl Sprites {
             }
             let name = names[index / 26].clone();
             let letter = (b'A' + (index % 26) as u8) as char;
-            self.write(&image, &name, letter, WEAPON_OFFSET)?;
+            self.write(&image, &name, letter, offset(image.dimensions()))?;
             let area = image.pixels().filter(|p| p.0[3] != 0).count();
             frames.push(Frame::Sprite { name, letter, area });
         }

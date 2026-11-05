@@ -7,7 +7,7 @@ use crate::{
     plan,
     project::Project,
     script::Pulled,
-    sprites::{self, Sprites},
+    sprites::{self, Anchor, Sprites},
 };
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::json;
@@ -95,10 +95,14 @@ pub fn build(project: &Project, options: &Options) -> Result<()> {
                 .ok()
                 .and_then(|text| serde_json::from_str(&text).ok())
                 .unwrap_or_default();
+        let weapon = &project.weapons[id];
         !done.is_empty()
-            && plan::renders(&project.weapons[id])
+            && plan::renders(weapon)
                 .iter()
                 .all(|render| done.contains_key(&render.name))
+            && plan::world_renders(weapon)
+                .iter()
+                .all(|name| done.contains_key(*name))
     };
     // 🖌️ a part of the render script flagged changed renders the weapons it draws again, until
     // they are rendered with the script as it is now
@@ -175,6 +179,9 @@ pub fn build(project: &Project, options: &Options) -> Result<()> {
                     "stance": {"in": weapon.clip("ads_up"), "out": weapon.clip("ads_down")},
                     "glow": plan::glow(weapon),
                     "renders": plan::renders(weapon),
+                    "headroom": plan::headroom(weapon),
+                    "world_renders": plan::world_renders(weapon),
+                    "world_clip": weapon.game.world_animation,
                 })
             }).collect::<Vec<_>>(),
         });
@@ -293,7 +300,7 @@ fn assemble(project: &Project, ids: &[String], work: &Path, say: fn(&str)) -> Re
                 .with_context(|| format!("{id}'s {} wasn't rendered", render.name))?;
             frames.insert(
                 render.name.clone(),
-                sprites.sequence(&folder.join(&render.name), count)?,
+                sprites.sequence(&folder.join(&render.name), count, plan::headroom(weapon))?,
             );
         }
         let pickup = if rendered.contains_key("world") {
@@ -301,6 +308,21 @@ fn assemble(project: &Project, ids: &[String], work: &Path, say: fn(&str)) -> Re
         } else {
             None
         };
+        // the world model where it flies (turning about its middle) and where it lies
+        for name in plan::world_renders(weapon) {
+            let Some(&count) = rendered.get(name).filter(|_| name != "world") else {
+                continue;
+            };
+            let anchor = if name == "tumble" {
+                Anchor::Middle
+            } else {
+                Anchor::Feet
+            };
+            frames.insert(
+                name.to_string(),
+                sprites.pictures(&folder.join(name), count, anchor)?,
+            );
+        }
         let chalk = if pulled.chalk {
             Some(sprites.chalk(&work.join("pull").join(&key).join("chalk.png"))?)
         } else {

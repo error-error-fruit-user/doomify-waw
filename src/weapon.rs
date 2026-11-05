@@ -96,6 +96,10 @@ pub struct Game {
     /// The world model, rendered for the pickup sprite.
     #[serde(default)]
     pub world: Option<Text>,
+    /// An animation of the world model, played on it where it lies once thrown or planted (the
+    /// cymbal monkey's clapping); the sounds its notetracks name play with it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_animation: Option<Text>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -319,6 +323,16 @@ impl Weapon {
             self.class
         );
         ensure!(!self.game.models.is_empty(), "game.models is empty");
+        if self.game.world_animation.is_some() {
+            ensure!(
+                self.game.world.is_some(),
+                "game.world_animation needs game.world, the model it moves"
+            );
+            ensure!(
+                self.thrown(),
+                "only grenades, the monkey and mines have a game.world_animation"
+            );
+        }
         if self.kind == Kind::Drink {
             ensure!(
                 matches!(
@@ -416,6 +430,11 @@ impl Weapon {
         clips.sort();
         clips.dedup();
         clips
+    }
+
+    /// Whether it is thrown or planted (grenades, the monkey, mines): it lies in the world after.
+    pub fn thrown(&self) -> bool {
+        matches!(self.kind, Kind::Grenade | Kind::Monkey | Kind::Mine)
     }
 
     /// Whether the weapon has a magazine to reload.

@@ -217,6 +217,34 @@ impl Built<'_> {
             .then(|| format!("TNT1 A 0 A_StartSound(\"{}\", {channel});", sound(alias)))
     }
 
+    /// The notetrack sounds of the world model's animation, by the frame they play on (of
+    /// `count`), as zero-tic lines that keep the frame shown.
+    fn world_events(&self, count: usize) -> BTreeMap<usize, Vec<String>> {
+        let mut events: BTreeMap<usize, Vec<String>> = BTreeMap::new();
+        let Some(clip) = self.weapon.game.world_animation.as_deref() else {
+            return events;
+        };
+        let Some(pulled) = self
+            .pulled
+            .clips
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case(clip))
+            .map(|(_, c)| c)
+        else {
+            return events;
+        };
+        for (name, time) in &pulled.events {
+            if self.pulled.sounds.contains_key(name) {
+                let frame = ((*time as f64 * 35.0).round() as usize).min(count.saturating_sub(1));
+                events.entry(frame).or_default().push(format!(
+                    "\"####\" \"#\" 0 A_StartSound(\"{}\", CHAN_AUTO);",
+                    sound(name)
+                ));
+            }
+        }
+        events
+    }
+
     /// The visible frames of `render` (see `visible`) and the notetrack sounds of `role` on them.
     fn trimmed(&self, render: &str, role: &str) -> (&[Frame], BTreeMap<usize, Vec<String>>) {
         let all = self.get(render);
@@ -1211,6 +1239,9 @@ fn shot_class(project: &Project, built: &Built) -> Code {
         .map(|a| sound(a))
         .unwrap_or_default();
     let (look_defaults, look_states) = look(project, weapon);
+    // the monkey's own animation plays its sounds where it lies
+    let world_sounds =
+        built.has("world_idle") && !built.world_events(built.get("world_idle").len()).is_empty();
     Code::new()
         .when(matches!(weapon.kind, Kind::Projectile), |code| {
             code.always(formatdoc! {r#"
@@ -1257,39 +1288,126 @@ fn shot_class(project: &Project, built: &Built) -> Code {
                 } else {
                     "DoomifyThrown"
                 };
-                code.always(formatdoc! {r#"
-                class {class}Shot : {p}_{parent} {{
-                    Default {{
-                        {p}_DoomifyThrown.BlastDamage {damage};
-                        {p}_DoomifyThrown.BlastRadius {radius};
-                        {p}_DoomifyThrown.BounceSound "{bounce}";
-                        {p}_DoomifyThrown.BlastSound "waw/grenade_explode";
-                    }}
-
-                    States {{
-                    Spawn:
-                        {sprite} {letter} -1;
-                        Stop;
-                    }}
-                }}
-            "#, radius = weapon.fire.splash.max(64), sprite = pickup.0, letter = pickup.1})
+                code.always(format!("class {class}Shot : {p}_{parent} {{"))
+                    .indented(|code| {
+                        code.always("Default {")
+                            .indented(|code| {
+                                code.always(format!("{p}_DoomifyThrown.BlastDamage {damage};"))
+                                    .always(format!(
+                                        "{p}_DoomifyThrown.BlastRadius {};",
+                                        weapon.fire.splash.max(64)
+                                    ))
+                                    .always(format!("{p}_DoomifyThrown.BounceSound \"{bounce}\";"))
+                                    .always(format!(
+                                        "{p}_DoomifyThrown.BlastSound \"waw/grenade_explode\";"
+                                    ))
+                                    .when(world_sounds, |code| {
+                                        // its own animation's sounds instead of the cymbals
+                                        code.always(format!("{p}_DoomifyMonkey.CymbalTics 0;"))
+                                    })
+                            })
+                            .always("}")
+                            .gap()
+                            .always("States {")
+                            .append(world_states(built, &pickup))
+                            .always("}")
+                    })
+                    .always("}")
+                    .always("")
             },
         )
         .otherwise_when(weapon.kind == Kind::Mine, |code| {
-            code.always(formatdoc! {r#"
-                class {class}Shot : {p}_DoomifyMine {{
-                    Default {{
-                        {p}_DoomifyMine.BlastDamage {damage};
-                        {p}_DoomifyMine.BlastRadius {radius};
-                    }}
+            let idle = built.get("world_idle");
+            code.always(format!("class {class}Shot : {p}_DoomifyMine {{"))
+                .indented(|code| {
+                    code.always("Default {")
+                        .indented(|code| {
+                            code.always(format!("{p}_DoomifyMine.BlastDamage {damage};"))
+                                .always(format!(
+                                    "{p}_DoomifyMine.BlastRadius {};",
+                                    weapon.fire.splash.max(64)
+                                ))
+                        })
+                        .always("}")
+                        .gap()
+                        .always("States {")
+                        .always("Spawn:")
+                        .indented(|code| {
+                            code.always(format!("{} {} -1;", pickup.0, pickup.1))
+                                .always("Stop;")
+                        })
+                        .when(!idle.is_empty(), |code| {
+                            // planted, it plays its animation while it waits
+                            code.always("Watch:").indented(|code| {
+                                let events = built.world_events(idle.len());
+                                code.each(idle.iter().enumerate(), |code, (index, frame)| {
+                                    let (sprite, letter) = frame.state();
+                                    code.each(events.get(&index).into_iter().flatten(), |c, l| {
+                                        c.always(l)
+                                    })
+                                    .always(format!(
+                                        "{sprite} {letter} 1 A_JumpIf(invoker.Triggered(), \"Jump\");"
+                                    ))
+                                })
+                                .always("Loop;")
+                            })
+                        })
+                        .always("}")
+                })
+                .always("}")
+                .always("")
+        })
+}
 
-                    States {{
-                    Spawn:
-                        {sprite} {letter} -1;
-                        Stop;
-                    }}
-                }}
-            "#, radius = weapon.fire.splash.max(64), sprite = pickup.0, letter = pickup.1})
+/// What is thrown, in the world: tumbling through the air (`Spawn`, its pickup when it has no
+/// tumble), then where it lands (`Death`): a grenade on its side, the monkey playing its
+/// animation with its sounds, else its pickup.
+fn world_states(built: &Built, pickup: &(String, char)) -> Code {
+    let tumble = built.get("tumble");
+    let floor = built.get("floor");
+    let idle = built.get("world_idle");
+    Code::new()
+        .always("Spawn:")
+        .indented(|code| {
+            code.when(!tumble.is_empty(), |code| {
+                // a frame of one sprite after another share a line
+                let mut runs: Vec<(String, String)> = vec![];
+                for frame in tumble {
+                    let (sprite, letter) = frame.state();
+                    match runs.last_mut() {
+                        Some((last, letters)) if *last == sprite => letters.push(letter),
+                        _ => runs.push((sprite, letter.to_string())),
+                    }
+                }
+                code.each(runs, |code, (sprite, letters)| {
+                    code.always(format!("{sprite} {letters} 2;"))
+                })
+                .always("Loop;")
+            })
+            .otherwise(|code| {
+                code.always(format!("{} {} -1;", pickup.0, pickup.1))
+                    .always("Stop;")
+            })
+        })
+        .always("Death:")
+        .indented(|code| {
+            code.when(!idle.is_empty(), |code| {
+                let events = built.world_events(idle.len());
+                code.each(idle.iter().enumerate(), |code, (index, frame)| {
+                    let (sprite, letter) = frame.state();
+                    code.each(events.get(&index).into_iter().flatten(), |c, l| c.always(l))
+                        .always(format!("{sprite} {letter} 1;"))
+                })
+                .always("Loop;")
+            })
+            .otherwise(|code| {
+                let (sprite, letter) = floor
+                    .first()
+                    .map(Frame::state)
+                    .unwrap_or_else(|| pickup.clone());
+                code.always(format!("{sprite} {letter} -1;"))
+                    .always("Stop;")
+            })
         })
 }
 

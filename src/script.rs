@@ -4,7 +4,7 @@
 //! (see `weapon.rs`) pulls:
 //!
 //! - `view.glb`: its first-person models and every clip it names, the gun hung on the hands;
-//! - `world.glb`: its world model, for the pickup sprite;
+//! - `world.glb`: its world model, for the pickup sprite, with its `world_animation` if it has one;
 //! - `sounds/<alias>_<n>.wav` (or `.xwm`): every sound role's alias and every alias a clip's
 //!   notetracks play, each variant numbered;
 //! - `chalk.png`: its wall drawing;
@@ -144,8 +144,17 @@ fn pull_weapon(game: &Game, weapon: &Weapon, out: &Path) -> Result<Pulled> {
     export(game, &models, &weapon.clips(), &view)?;
     pulled.clips = clips_of(&view)?;
     if let Some(world) = &weapon.game.world {
-        export(game, &[world.to_string()], &[], &out.join("world.glb"))?;
+        let clips: Vec<String> = weapon
+            .game
+            .world_animation
+            .iter()
+            .map(|c| c.to_string())
+            .collect();
+        let glb = out.join("world.glb");
+        export(game, &[world.to_string()], &clips, &glb)?;
         pulled.world = true;
+        // its animation's length and notetracks, beside the view's clips
+        pulled.clips.extend(clips_of(&glb)?);
     }
     if let Some(wall) = &weapon.wall {
         let member = format!("images/{}.iwi", wall.chalk).to_lowercase();
