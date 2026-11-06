@@ -110,7 +110,9 @@ fn export(game: &Game, models: &[String], clips: &[String], output: &Path) -> Re
     )
 }
 
-/// The clips' lengths and notetracks, from the GLB the export wrote.
+/// The clips' lengths and notetracks, from the GLB the export wrote. A notetrack playing a sound
+/// may name it after `sndnt#` (the monkey's cymbals in `o_monkey_bomb`); it is kept as the
+/// alias alone, like the viewmodels' notetracks.
 fn clips_of(glb: &Path) -> Result<BTreeMap<String, Clip>> {
     let bytes = fs::read(glb)?;
     ensure!(
@@ -123,12 +125,21 @@ fn clips_of(glb: &Path) -> Result<BTreeMap<String, Clip>> {
     let mut clips = BTreeMap::new();
     if let Some(found) = document["scenes"][0]["extras"]["hellHoundClips"].as_object() {
         for (name, clip) in found {
+            let events: Vec<(String, f32)> =
+                serde_json::from_value(clip["events"].clone()).unwrap_or_default();
+            let events = events
+                .into_iter()
+                .map(|(track, time)| match track.strip_prefix("sndnt#") {
+                    Some(alias) => (alias.to_string(), time),
+                    None => (track, time),
+                })
+                .collect();
             clips.insert(
                 name.clone(),
                 Clip {
                     frames: clip["frames"].as_u64().unwrap_or(0) as u16,
                     fps: clip["fps"].as_f64().unwrap_or(30.0) as f32,
-                    events: serde_json::from_value(clip["events"].clone()).unwrap_or_default(),
+                    events,
                 },
             );
         }

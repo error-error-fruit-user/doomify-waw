@@ -13,6 +13,9 @@ pub const ANIMATION_ROLES: &[&str] = &[
     "idle",
     "empty_idle",
     "fire",
+    // equipment: played while the trigger is held before the throw or plant (the Betty's pin
+    // pulled), held at its end until it is let go
+    "hold_fire",
     "last_fire",
     "ads_fire",
     "ads_last_fire",
@@ -333,6 +336,10 @@ impl Weapon {
                 "only grenades, the monkey and mines have a game.world_animation"
             );
         }
+        ensure!(
+            !self.animations.contains_key("hold_fire") || self.thrown(),
+            "only grenades, the monkey and mines have an animations.hold_fire"
+        );
         if self.kind == Kind::Drink {
             ensure!(
                 matches!(

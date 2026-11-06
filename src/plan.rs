@@ -102,15 +102,16 @@ pub fn headroom(weapon: &Weapon) -> u32 {
 }
 
 /// The pictures of the world model a weapon has besides its pickup (`world`): what is thrown
-/// tumbles through the air (`tumble`), a grenade lies on its side where it lands (`floor`), and
-/// one with a world animation plays it where it lies (`world_idle`).
+/// tumbles through the air (`tumble`; the Betty as it springs up), a grenade rocks to rest on its
+/// side where it lands (`floor`), and one with a world animation plays it where it lies
+/// (`world_idle`).
 pub fn world_renders(weapon: &Weapon) -> Vec<&'static str> {
     let mut names = vec![];
     if weapon.game.world.is_none() {
         return names;
     }
     names.push("world");
-    if matches!(weapon.kind, Kind::Grenade | Kind::Monkey) {
+    if weapon.thrown() {
         names.push("tumble");
     }
     if weapon.kind == Kind::Grenade {
@@ -157,6 +158,7 @@ pub fn renders(weapon: &Weapon) -> Vec<Render> {
         &[None],
     );
     add("fire", clip("fire"), Stance::Hip, false, &shots);
+    add("hold_fire", clip("hold_fire"), Stance::Hip, false, &[None]);
     add(
         "last_fire",
         distinct("last_fire", "fire"),
@@ -374,6 +376,11 @@ mod tests {
             "models = [\"hands\", \"gun\"]\nworld = \"w\"\nworld_animation = \"clap\"",
         ));
         assert_eq!(world_renders(&monkey), ["world", "tumble", "world_idle"]);
+        let mine = weapon(&format!("kind = \"mine\"\n{BASE}").replace(
+            "models = [\"hands\", \"gun\"]",
+            "models = [\"hands\", \"gun\"]\nworld = \"w\"",
+        ));
+        assert_eq!(world_renders(&mine), ["world", "tumble"]);
     }
 
     #[test]

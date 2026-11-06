@@ -25,6 +25,8 @@ splash = 200
 idle = "viewmodel_bbetty_idle"
 empty_idle = "viewmodel_bbetty_empty_idle"
 fire = "viewmodel_bbetty_fire"
+# held before it is planted: its pin pulled (in the game, but unused there)
+hold_fire = "viewmodel_bbetty_holdfire"
 raise = "viewmodel_bbetty_raise"
 drop = "viewmodel_bbetty_drop"
 

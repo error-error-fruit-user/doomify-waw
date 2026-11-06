@@ -38,6 +38,9 @@ PICKUP_PPM = 130
 PIXEL_ASPECT = 1.2
 # A thrown thing turns through the air in this many pictures, a whole turn.
 TUMBLE_FRAMES = 8
+# A grenade landing rocks to rest on its side: the degrees its right end is up, picture by
+# picture (3 tics each), the last how it lies.
+FLOOR_ROCK = (12, 5, 0, 6, 2, 0, 2, 0)
 # Where the lights in weapon.blend aim; the world model is moved there for its picture.
 GUN = (0.45, -0.08, -0.12)
 
@@ -48,8 +51,8 @@ GUN = (0.45, -0.08, -0.12)
 RENDER_PARTS = {
     "views": {"kinds": "*"},  # the scene, the views and the world model's picture
     "bottle glass": {"kinds": "drink"},  # see_through: a perk bottle's glass shows its drink, and its open neck is whole
-    "headroom": {"kinds": "grenade monkey mine melee", "changed": True},  # canvas: equipment's views rendered with room above the screen
-    "thrown": {"kinds": "grenade monkey mine"},  # render_world: tumbling, lying on the floor and the world model's animation
+    "headroom": {"kinds": "grenade monkey mine melee"},  # canvas: equipment's views rendered with room above the screen
+    "thrown": {"kinds": "grenade monkey mine", "changed": True},  # render_world: tumbling (the Betty too), rocking to rest on the floor and the world model's animation
 }
 
 
@@ -426,11 +429,12 @@ def still(scene, folder, index):
     bpy.ops.render.render(write_still=True)
 
 
-def turn(roots, start, angle):
-    """Turns the model about GUN, in the picture's plane, `angle` degrees from where it was."""
+def turn(roots, start, angle, about=GUN):
+    """Turns the model about `about` (GUN), in the picture's plane, `angle` degrees from where it
+    was (`start`); a positive angle lowers what is right of it."""
     from mathutils import Matrix
 
-    pivot = Matrix.Translation(GUN)
+    pivot = Matrix.Translation(about)
     spin = pivot @ Matrix.Rotation(math.radians(angle), 4, "Y") @ pivot.inverted()
     for obj, matrix in zip(roots, start):
         obj.matrix_world = spin @ matrix
@@ -439,8 +443,9 @@ def turn(roots, start, angle):
 
 def render_world(weapon, scene, done):
     """The world model from its right side, for the pickup sprite, and what weapon["world_renders"]
-    asks besides: `tumble`, turning through the air in eighths, about its middle; `floor`, lying
-    on its side; `world_idle`, its animation (weapon["world_clip"]) where it lies."""
+    asks besides: `tumble`, turning through the air in eighths, about its middle; `floor`, rocking
+    to rest on its side (FLOOR_ROCK); `world_idle`, its animation (weapon["world_clip"]) where it
+    lies."""
     path = os.path.join(weapon["pull"], "world.glb")
     if not os.path.exists(path):
         return
@@ -485,15 +490,23 @@ def render_world(weapon, scene, done):
 
     if "floor" in wanted:
         folder = os.path.join(weapon["frames"], "floor")
-        done["floor"] = 1
-        if again or not finished(folder, 1):
+        frames = len(FLOOR_ROCK)
+        done["floor"] = frames
+        if again or not finished(folder, frames):
             # on its side: its long way along the floor
             turn(roots, start, 90 if height > width else 0)
             low, high = bounds(objects)
-            side_picture(scene, ((low[0] + high[0]) / 2, (low[2] + high[2]) / 2),
-                         high[0] - low[0], high[2] - low[2])
-            say("rendering", weapon["id"], "lying on the floor")
-            still(scene, folder, 0)
+            lying = [obj.matrix_world.copy() for obj in roots]
+            # its right end bounces on its left one, lower each time, on one canvas whose
+            # bottom is the floor
+            long = high[0] - low[0]
+            up = long * math.sin(math.radians(max(FLOOR_ROCK)))
+            tall = high[2] - low[2] + up
+            side_picture(scene, ((low[0] + high[0]) / 2, low[2] + tall / 2), long, tall)
+            say("rendering", weapon["id"], "rocking to rest on the floor", frames, "frames")
+            for index, angle in enumerate(FLOOR_ROCK):
+                turn(roots, lying, -angle, about=(low[0], GUN[1], low[2]))
+                still(scene, folder, index)
             turn(roots, start, 0)
 
     clip = weapon.get("world_clip")

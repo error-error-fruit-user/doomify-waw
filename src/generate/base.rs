@@ -472,12 +472,14 @@ pub fn weapon(p: &str) -> String {
             meta int blastRadius;
             meta Sound bounceSound;
             meta Sound blastSound;
+            meta int smokeTics;         // tics between puffs of its burning fuse; 0 for none
 
             property Fuse: fuse;
             property BlastDamage: blastDamage;
             property BlastRadius: blastRadius;
             property BounceSound: bounceSound;
             property BlastSound: blastSound;
+            property SmokeTics: smokeTics;
 
             Default {{
                 Projectile;
@@ -512,6 +514,13 @@ pub fn weapon(p: &str) -> String {
                 }}
                 if (self.vel.Length() > 0.5) {{
                     self.angle += 24;
+                }}
+                // a stick grenade's fuse burns out of its handle: a wisp of grey smoke rising
+                if (self.smokeTics > 0 && self.reactionTime % self.smokeTics == 0) {{
+                    let grey = Random[Doomify](110, 160);
+                    self.A_SpawnParticle(Color(grey, grey, grey), 0, 30, FRandom[Doomify](3, 5), 0,
+                        FRandom[Doomify](-2, 2), FRandom[Doomify](-2, 2), 2, FRandom[Doomify](-0.2, 0.2), FRandom[Doomify](-0.2, 0.2), FRandom[Doomify](0.4, 0.8),
+                        startalphaf: 0.5, fadestepf: 0.016, sizestep: 0.15);
                 }}
                 if (--self.reactionTime == 0) {{
                     self.Blast();
@@ -647,7 +656,10 @@ pub fn weapon(p: &str) -> String {
                     self.vel.z = 9;
                     self.bNoGravity = false;
                 }}
+            Leap:
+                // a Betty with pictures of it turning flips through the air instead (10 tics)
                 "####" "#" 10;
+            Burst:
                 TNT1 A 0 {{
                     self.A_StartSound("waw/grenade_explode", CHAN_AUTO, attenuation: ATTN_NONE);
                     self.A_Explode(self.blastDamage, self.blastRadius, 0, true, self.blastRadius / 4, damagetype: 'Explosive');

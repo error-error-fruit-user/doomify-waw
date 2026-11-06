@@ -882,7 +882,8 @@ fn aim_states(
 }
 
 /// Grenades, the monkey and the Betty: the throw (or plant) is the fire animation, letting go
-/// of it two thirds of the way in.
+/// of it two thirds of the way in. One with a `hold_fire` animation plays it first (the Betty's
+/// pin pulled) and holds its last frame (`Hold`) for as long as the trigger is held.
 fn thrown_states(code: Code, project: &Project, built: &Built) -> Code {
     let (all, events) = built.trimmed("fire", "fire");
     let release = all.len() * 2 / 3;
@@ -892,17 +893,41 @@ fn thrown_states(code: Code, project: &Project, built: &Built) -> Code {
     } else {
         -8.0
     };
-    code.always("Fire:").indented(|code| {
-        code.always("TNT1 A 0 WhenNoAmmo(\"EmptyIdle\");")
-            .append(frames(Code::new(), before, Tic::Plain, &events))
-            .when_some(built.sound_line("throw", "CHAN_WEAPON"), |c, l| c.always(l))
-            .always(format!(
-                "TNT1 A 0 ThrowOne(\"{}Shot\", {pitch:.1});",
-                project.class(built.id)
-            ))
-            .append(frames(Code::new(), after, Tic::Recover, &BTreeMap::new()))
-            .always("Goto Ready;")
-    })
+    let (held, held_events) = built.trimmed("hold_fire", "hold_fire");
+    code.always("Fire:")
+        .indented(|code| {
+            code.always("TNT1 A 0 WhenNoAmmo(\"EmptyIdle\");")
+                .append(frames(Code::new(), held, Tic::Plain, &held_events))
+        })
+        .when_some(held.last(), |code, last| {
+            let (sprite, letter) = last.state();
+            code.always("Hold:").indented(|code| {
+                code.always(format!("{sprite} {letter} 1;"))
+                    .always("TNT1 A 0 A_ReFire;")
+            })
+        })
+        .always("Throw:")
+        .indented(|code| thrown_release(code, project, built, before, after, &events, pitch))
+}
+
+/// The rest of the throw: its frames up to letting go, the throw, and its frames after.
+fn thrown_release(
+    code: Code,
+    project: &Project,
+    built: &Built,
+    before: &[Frame],
+    after: &[Frame],
+    events: &BTreeMap<usize, Vec<String>>,
+    pitch: f64,
+) -> Code {
+    code.append(frames(Code::new(), before, Tic::Plain, events))
+        .when_some(built.sound_line("throw", "CHAN_WEAPON"), |c, l| c.always(l))
+        .always(format!(
+            "TNT1 A 0 ThrowOne(\"{}Shot\", {pitch:.1});",
+            project.class(built.id)
+        ))
+        .append(frames(Code::new(), after, Tic::Recover, &BTreeMap::new()))
+        .always("Goto Ready;")
 }
 
 /// The knife replaces the kick: owning it swaps Horde Hammer's kick for a stab drawn with the
@@ -1305,6 +1330,10 @@ fn shot_class(project: &Project, built: &Built) -> Code {
                                         // its own animation's sounds instead of the cymbals
                                         code.always(format!("{p}_DoomifyMonkey.CymbalTics 0;"))
                                     })
+                                    .when(weapon.kind == Kind::Grenade, |code| {
+                                        // its fuse smokes until it goes off
+                                        code.always(format!("{p}_DoomifyThrown.SmokeTics 3;"))
+                                    })
                             })
                             .always("}")
                             .gap()
@@ -1318,6 +1347,7 @@ fn shot_class(project: &Project, built: &Built) -> Code {
         )
         .otherwise_when(weapon.kind == Kind::Mine, |code| {
             let idle = built.get("world_idle");
+            let tumble = built.get("tumble");
             code.always(format!("class {class}Shot : {p}_DoomifyMine {{"))
                 .indented(|code| {
                     code.always("Default {")
@@ -1352,6 +1382,14 @@ fn shot_class(project: &Project, built: &Built) -> Code {
                                 .always("Loop;")
                             })
                         })
+                        .when(!tumble.is_empty(), |code| {
+                            // set off, it flips as it springs up, for the tics of its leap
+                            let flips: Vec<Frame> = (0..MINE_LEAP_TICS)
+                                .map(|tic| tumble[tic % tumble.len()].clone())
+                                .collect();
+                            code.always("Leap:")
+                                .indented(|code| runs(code, &flips, 1).always("Goto Burst;"))
+                        })
                         .always("}")
                 })
                 .always("}")
@@ -1359,9 +1397,27 @@ fn shot_class(project: &Project, built: &Built) -> Code {
         })
 }
 
+/// How long a Betty set off is in the air before it goes off (`Leap` in its base class).
+const MINE_LEAP_TICS: usize = 10;
+
+/// `frames` as state lines of `tics` each, a frame of one sprite after another sharing a line.
+fn runs(code: Code, frames: &[Frame], tics: u32) -> Code {
+    let mut runs: Vec<(String, String)> = vec![];
+    for frame in frames {
+        let (sprite, letter) = frame.state();
+        match runs.last_mut() {
+            Some((last, letters)) if *last == sprite => letters.push(letter),
+            _ => runs.push((sprite, letter.to_string())),
+        }
+    }
+    code.each(runs, |code, (sprite, letters)| {
+        code.always(format!("{sprite} {letters} {tics};"))
+    })
+}
+
 /// What is thrown, in the world: tumbling through the air (`Spawn`, its pickup when it has no
-/// tumble), then where it lands (`Death`): a grenade on its side, the monkey playing its
-/// animation with its sounds, else its pickup.
+/// tumble), then where it lands (`Death`): a grenade rocking to rest on its side, the monkey
+/// playing its animation with its sounds, else its pickup.
 fn world_states(built: &Built, pickup: &(String, char)) -> Code {
     let tumble = built.get("tumble");
     let floor = built.get("floor");
@@ -1370,19 +1426,7 @@ fn world_states(built: &Built, pickup: &(String, char)) -> Code {
         .always("Spawn:")
         .indented(|code| {
             code.when(!tumble.is_empty(), |code| {
-                // a frame of one sprite after another share a line
-                let mut runs: Vec<(String, String)> = vec![];
-                for frame in tumble {
-                    let (sprite, letter) = frame.state();
-                    match runs.last_mut() {
-                        Some((last, letters)) if *last == sprite => letters.push(letter),
-                        _ => runs.push((sprite, letter.to_string())),
-                    }
-                }
-                code.each(runs, |code, (sprite, letters)| {
-                    code.always(format!("{sprite} {letters} 2;"))
-                })
-                .always("Loop;")
+                runs(code, tumble, 2).always("Loop;")
             })
             .otherwise(|code| {
                 code.always(format!("{} {} -1;", pickup.0, pickup.1))
@@ -1401,11 +1445,14 @@ fn world_states(built: &Built, pickup: &(String, char)) -> Code {
                 .always("Loop;")
             })
             .otherwise(|code| {
-                let (sprite, letter) = floor
+                // rocking to rest, then lying still on the last
+                let (rocking, rest) = floor.split_at(floor.len().saturating_sub(1));
+                let (sprite, letter) = rest
                     .first()
                     .map(Frame::state)
                     .unwrap_or_else(|| pickup.clone());
-                code.always(format!("{sprite} {letter} -1;"))
+                runs(code, rocking, 3)
+                    .always(format!("{sprite} {letter} -1;"))
                     .always("Stop;")
             })
         })

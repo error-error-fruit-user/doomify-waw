@@ -11,6 +11,8 @@ box_weight = 1
 weapon = "zombie_cymbal_monkey"
 models = ["viewmodel_hands", "viewmodel_zombie_cymbal_monkey"]
 world = "weapon_zombie_monkey_bomb"
+# where it lands: Der Riese's monkey playing its cymbals, with their clangs
+world_animation = "o_monkey_bomb"
 
 [ammo]
 magazine = 3
