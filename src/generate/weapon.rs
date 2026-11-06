@@ -25,6 +25,10 @@ pub struct Built<'a> {
     pub upgrade_built: bool,
     /// Its last stand replacement is in this build.
     pub downed_built: bool,
+    /// Its alternate ammo type is in this build.
+    pub alternate_built: bool,
+    /// The weapon in this build whose alternate ammo type it is, which its wall drawing sells.
+    pub alternate_of: Option<&'a str>,
 }
 
 /// How long a frame lasts and what it does.
@@ -1187,6 +1191,8 @@ fn drink_file(project: &Project, built: &Built, header: String) -> String {
 fn wall_drawing(project: &Project, built: &Built) -> Code {
     let weapon = built.weapon;
     let class = project.class(built.id);
+    // an alternate ammo type's drawing sells its weapon, which brings it along
+    let sold = project.class(built.alternate_of.unwrap_or(built.id));
     Code::new().when_some(
         built.chalk.as_ref().zip(weapon.wall.as_ref()),
         |code, (chalk, wall)| {
@@ -1197,7 +1203,7 @@ fn wall_drawing(project: &Project, built: &Built) -> Code {
                 Default {{
                     //$Category "World at War"
                     //$Title "{name} Wall Buy"
-                    HH_WallBuy.Weapon "{class}";
+                    HH_WallBuy.Weapon "{sold}";
                     HH_WallBuy.Cost {cost};
                     Scale {scale:.2};
                 }}
@@ -1571,6 +1577,17 @@ pub fn file(project: &Project, built: &Built) -> String {
             code.always("HH_Weapon.Counted false;")
                 .always("HH_Weapon.Equipment true;")
         })
+        // an alternate ammo type comes with its weapon and counts against nothing
+        .when(
+            crate::weapon::alternate_of(&project.weapons, built.id).is_some(),
+            |code| code.always("HH_Weapon.Counted false;"),
+        )
+        .when_some(
+            weapon.alternate.as_ref().filter(|_| built.alternate_built),
+            |code, alternate| {
+                code.always(format!("HH_Weapon.Alternate \"{}\";", project.class(alternate)))
+            },
+        )
         .always(format!(
             "HH_Weapon.BoxWeight {};",
             if weapon.upgraded {

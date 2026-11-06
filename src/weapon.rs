@@ -291,6 +291,12 @@ pub struct Weapon {
     /// The id of its Pack-a-Punched version.
     #[serde(default)]
     pub upgrade: Option<Text>,
+    /// The id of its alternate ammo type: another weapon, the same gun firing something else (the
+    /// M1 Garand's rifle grenades), carried with it (`HH_Weapon.Alternate`; Horde Hammer's slot 3
+    /// swaps to it and back). The alternate counts against nothing, isn't in the box, and its wall
+    /// drawing sells this weapon.
+    #[serde(default)]
+    pub alternate: Option<Text>,
     /// This is a Pack-a-Punched version: never in the box.
     #[serde(default)]
     pub upgraded: bool,
@@ -319,6 +325,14 @@ pub struct Weapon {
     /// What it fires, when that is seen (projectiles and the Wunderwaffe).
     #[serde(default)]
     pub projectile: Option<Look>,
+}
+
+/// The weapon (by id) whose alternate ammo type `id` is, if it is one.
+pub fn alternate_of<'a>(weapons: &'a BTreeMap<String, Weapon>, id: &str) -> Option<&'a str> {
+    weapons
+        .iter()
+        .find(|(_, w)| w.alternate.as_deref() == Some(id))
+        .map(|(base, _)| base.as_str())
 }
 
 impl Weapon {
@@ -522,6 +536,29 @@ pub fn load_all(folder: &Path) -> Result<BTreeMap<String, Weapon>> {
         }
         if let Some(other) = classes.insert(weapon.class.to_lowercase(), id) {
             bail!("{id} and {other} share the class {}", weapon.class);
+        }
+        if let Some(alternate) = &weapon.alternate {
+            let target = weapons.get(alternate.as_ref()).with_context(|| {
+                format!("{id}'s alternate {alternate} has no weapons/{alternate}.toml")
+            })?;
+            ensure!(
+                alternate.as_ref() as &str != id.as_str() && target.alternate.is_none(),
+                "{id}'s alternate {alternate} must be another weapon, with no alternate of its own"
+            );
+            ensure!(
+                target.box_weight == 0 && target.upgraded == weapon.upgraded,
+                "{id}'s alternate {alternate} must have no box_weight, and be upgraded only if {id} is"
+            );
+            ensure!(
+                !target.thrown() && !matches!(target.kind, Kind::Melee | Kind::Drink),
+                "{id}'s alternate {alternate} must be a gun: grenades, the knife and drinks are equipment"
+            );
+            if let Some(other) = weapons
+                .iter()
+                .find(|(other, w)| *other != id && w.alternate.as_ref() == Some(alternate))
+            {
+                bail!("{id} and {} share the alternate {alternate}", other.0);
+            }
         }
         if let Some(upgrade) = &weapon.upgrade {
             let target = weapons.get(upgrade.as_ref()).with_context(|| {

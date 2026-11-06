@@ -6,6 +6,8 @@ sprite = "GL"
 kind = "bullet"
 slot = 2
 upgrade = "m1garand_gl_upgraded"
+# its rifle grenades: Horde Hammer's slot 3 (the 3 key, the d-pad's left) swaps to them and back
+alternate = "m7_launcher"
 box_weight = 1
 
 [game]

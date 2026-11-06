@@ -396,6 +396,12 @@ fn assemble(project: &Project, ids: &[String], work: &Path, say: fn(&str)) -> Re
                 .downed
                 .as_ref()
                 .is_some_and(|d| ids.iter().any(|id| id == d)),
+            alternate_built: weapon
+                .alternate
+                .as_ref()
+                .is_some_and(|a| ids.iter().any(|id| id == a)),
+            alternate_of: crate::weapon::alternate_of(&project.weapons, id)
+                .filter(|base| ids.iter().any(|id| id == base)),
         })
     };
     let cores = std::thread::available_parallelism().map_or(4, |n| n.get());
