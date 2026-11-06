@@ -346,6 +346,8 @@ fn states(project: &Project, built: &Built) -> Code {
     let weapon = built.weapon;
     let tesla = weapon.kind == Kind::Tesla;
     let thrown = matches!(weapon.kind, Kind::Grenade | Kind::Monkey | Kind::Mine);
+    // equipment has no magazine: it is empty when its reserve is
+    let when_empty = if thrown { "WhenNoAmmo" } else { "WhenNoActiveAmmo" };
     let melee = weapon.kind == Kind::Melee;
     let gun = !thrown && !melee;
     let aims = gun && built.has(&variant("ads_idle", plan::full(weapon)));
@@ -384,7 +386,7 @@ fn states(project: &Project, built: &Built) -> Code {
                     code.always("TNT1 A 0 WhenFirstRaise(\"FirstRaise\");")
                 })
                 .when(built.has("empty_raise"), |code| {
-                    code.always("TNT1 A 0 WhenNoActiveAmmo(\"EmptyRaise\");")
+                    code.always(format!("TNT1 A 0 {when_empty}(\"EmptyRaise\");"))
                 })
                 .when(tesla, |code| dispatch(code, "Raise"))
                 .otherwise(|code| code.always("Goto Raise;"))
@@ -434,7 +436,7 @@ fn states(project: &Project, built: &Built) -> Code {
             code.when(aims, |code| {
                 code.always("TNT1 A 0 WhenZoomed(\"ZoomReady\");")
             })
-            .when(built.has("empty_idle"), |code| {
+            .when(built.has("empty_idle") && !thrown, |code| {
                 code.always("TNT1 A 0 WhenNoActiveAmmo(\"EmptyIdle\");")
             })
             .when(thrown, |code| {
@@ -467,7 +469,7 @@ fn states(project: &Project, built: &Built) -> Code {
             code.when(aims, |code| code.always("TNT1 A 0 ZoomOut;"))
                 .always("TNT1 A 0 AtRest;")
                 .when(built.has("empty_drop"), |code| {
-                    code.always("TNT1 A 0 WhenNoActiveAmmo(\"EmptyLower\");")
+                    code.always(format!("TNT1 A 0 {when_empty}(\"EmptyLower\");"))
                 })
                 .when(tesla, |code| dispatch(code, "Lower"))
                 .otherwise(|code| code.always("Goto Lower;"))

@@ -481,6 +481,9 @@ pub fn weapon(p: &str) -> String {
             property BlastSound: blastSound;
             property SmokeTics: smokeTics;
 
+            // tics left on its fuse: its own, since a hit sets reactionTime to 0, even with NODAMAGE
+            int fuseLeft;
+
             Default {{
                 Projectile;
                 -NOGRAVITY
@@ -504,7 +507,7 @@ pub fn weapon(p: &str) -> String {
 
             override void PostBeginPlay() {{
                 super.PostBeginPlay();
-                self.reactionTime = self.fuse;
+                self.fuseLeft = self.fuse;
             }}
 
             override void Tick() {{
@@ -527,13 +530,13 @@ pub fn weapon(p: &str) -> String {
                     }}
                 }}
                 // a stick grenade's fuse burns out of its handle: a wisp of grey smoke rising
-                if (self.smokeTics > 0 && self.reactionTime % self.smokeTics == 0) {{
+                if (self.smokeTics > 0 && self.fuseLeft % self.smokeTics == 0) {{
                     let grey = Random[Doomify](110, 160);
                     self.A_SpawnParticle(Color(grey, grey, grey), 0, 30, FRandom[Doomify](3, 5), 0,
                         FRandom[Doomify](-2, 2), FRandom[Doomify](-2, 2), 2, FRandom[Doomify](-0.2, 0.2), FRandom[Doomify](-0.2, 0.2), FRandom[Doomify](0.4, 0.8),
                         startalphaf: 0.5, fadestepf: 0.016, sizestep: 0.15);
                 }}
-                if (--self.reactionTime == 0) {{
+                if (--self.fuseLeft == 0) {{
                     self.Blast();
                 }}
             }}
@@ -591,10 +594,10 @@ pub fn weapon(p: &str) -> String {
 
             override void Tick() {{
                 super.Tick();
-                if (self.bDestroyed || self.health <= 0 || self.reactionTime <= 0) {{
+                if (self.bDestroyed || self.health <= 0 || self.fuseLeft <= 0) {{
                     return;
                 }}
-                if (self.cymbalTics > 0 && self.reactionTime % self.cymbalTics == 0) {{
+                if (self.cymbalTics > 0 && self.fuseLeft % self.cymbalTics == 0) {{
                     self.A_StartSound("waw/monk_cymb_m", CHAN_AUTO);
                 }}
                 // Horde Hammer sends zombies back after players; the monkey calls them every tic
