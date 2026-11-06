@@ -13,6 +13,7 @@ pub fn weapon(p: &str) -> String {
         class {p}_DoomifyWeapon : HH_Weapon {{
             int frameClock;         // how far Pace is through skipping frames
             bool raisedBefore;      // the first time it is raised it plays its first raise
+            bool puttingOn;         // an alternate ammo type swapped to from its weapon: put on it
             meta double aimZoom;    // the zoom when aimed (World at War's adsZoomFov)
             // The flamethrower doesn't reload: its tank refills while it isn't burning, and
             // emptied it overheats until full again
@@ -127,6 +128,31 @@ pub fn weapon(p: &str) -> String {
                 let first = !invoker.raisedBefore;
                 invoker.raisedBefore = true;
                 return invoker.When(first, label);
+            }}
+
+            // An alternate ammo type (HH_Weapon.Alternate) swapped to from its weapon is put on it
+            // (its first raise), and taken off it (that backwards) when swapped back; loaded,
+            // since what goes on is its round. Its weapon, put away for it, says so (Deselect).
+            action void PutOnAlternate() {{
+                let pending = self.player != null? self.player.PendingWeapon: null;
+                let alternate = pending != WP_NOCHANGE? {p}_DoomifyWeapon(pending): null;
+                if (alternate != null && HH_InventoryManager.AlternateOf(invoker.GetClass()) == alternate.GetClass()) {{
+                    alternate.puttingOn = true;
+                }}
+            }}
+
+            action State WhenPutOn(StateLabel label) {{
+                let on = invoker.puttingOn && invoker.activeAmmo > 0;
+                invoker.puttingOn = false;
+                return invoker.When(on, label);
+            }}
+
+            action State WhenTakenOff(StateLabel label) {{
+                invoker.puttingOn = false;
+                let pending = self.player != null? self.player.PendingWeapon: null;
+                let off = pending != null && pending != WP_NOCHANGE && invoker.activeAmmo > 0
+                    && HH_InventoryManager.AlternateOf(pending.GetClass()) == invoker.GetClass();
+                return invoker.When(off, label);
             }}
 
             action State WhenActiveAmmo(int count, StateLabel label) {{

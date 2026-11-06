@@ -380,6 +380,10 @@ fn states(project: &Project, built: &Built) -> Code {
     };
     let pickup = built.pickup.clone().unwrap_or(Frame::Empty).state();
     let full = plan::full(weapon);
+    // an alternate ammo type (HH_Weapon.Alternate) is put on its weapon and taken off it
+    let alternate = gun && built.alternate_of.is_some();
+    let taken_off = alternate && built.has(&variant("first_raise", full));
+    let has_alternate = weapon.alternate.is_some() && built.alternate_built;
 
     Code::new()
         .always("Spawn:")
@@ -395,8 +399,13 @@ fn states(project: &Project, built: &Built) -> Code {
                 .when(weapon.view.scope.is_some(), |code| {
                     code.always("TNT1 A 0 ScopeLayer;")
                 })
+                // an alternate ammo type's first raise puts it on its weapon: it plays when
+                // swapped to from the weapon, not the first time
                 .when(built.has(&variant("first_raise", full)), |code| {
-                    code.always("TNT1 A 0 WhenFirstRaise(\"FirstRaise\");")
+                    code.when(alternate, |code| {
+                        code.always("TNT1 A 0 WhenPutOn(\"FirstRaise\");")
+                    })
+                    .otherwise(|code| code.always("TNT1 A 0 WhenFirstRaise(\"FirstRaise\");"))
                 })
                 .when(built.has("empty_raise"), |code| {
                     code.always(format!("TNT1 A 0 {when_empty}(\"EmptyRaise\");"))
@@ -481,11 +490,33 @@ fn states(project: &Project, built: &Built) -> Code {
         .indented(|code| {
             code.when(aims, |code| code.always("TNT1 A 0 ZoomOut;"))
                 .always("TNT1 A 0 AtRest;")
+                .when(has_alternate, |code| code.always("TNT1 A 0 PutOnAlternate;"))
+                .when(taken_off, |code| code.always("TNT1 A 0 WhenTakenOff(\"TakeOff\");"))
                 .when(built.has("empty_drop"), |code| {
                     code.always(format!("TNT1 A 0 {when_empty}(\"EmptyLower\");"))
                 })
                 .when(tesla, |code| dispatch(code, "Lower"))
                 .otherwise(|code| code.always("Goto Lower;"))
+        })
+        // taken off its weapon: the putting on backwards, ending where it began, off screen
+        .when(taken_off, |code| {
+            let (shown, events) =
+                built.switched_frames("first_raise", &variant("first_raise", full));
+            let last = shown.len().saturating_sub(1);
+            let mut backwards: Vec<Frame> = shown.iter().rev().cloned().collect();
+            let mut sounds: BTreeMap<usize, Vec<String>> = BTreeMap::new();
+            for (at, lines) in events {
+                sounds.entry(last - at.min(last)).or_default().extend(lines);
+            }
+            while backwards.len() > 1 && backwards.last() == Some(&Frame::Empty) {
+                backwards.pop();
+            }
+            code.always("TakeOff:").indented(|code| {
+                code.when_some(built.sound_line("drop", "CHAN_WEAPON"), |c, l| c.always(l))
+                    .append(frames(Code::new(), &backwards, Tic::Plain, &sounds))
+                    .always("TNT1 A 0 A_Lower(256);")
+                    .always("Wait;")
+            })
         })
         .when(built.has("empty_drop"), |code| {
             code.always("EmptyLower:").indented(|code| {
