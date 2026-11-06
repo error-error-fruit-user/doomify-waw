@@ -515,6 +515,17 @@ pub fn weapon(p: &str) -> String {
                 if (self.vel.Length() > 0.5) {{
                     self.angle += 24;
                 }}
+                // done bouncing, it lies where it is (Death) and slides to a stop: a grenade's
+                // bounces never kill it, and the engine gives missiles no friction
+                if (self.pos.z <= self.floorz && abs(self.vel.z) < 1) {{
+                    self.vel.xy *= 0.85;
+                    if (self.vel.xy.Length() < 0.3) {{
+                        self.vel.xy = (0, 0);
+                    }}
+                    if (self.InStateSequence(self.curState, self.ResolveState("Spawn"))) {{
+                        self.SetStateLabel("Death");
+                    }}
+                }}
                 // a stick grenade's fuse burns out of its handle: a wisp of grey smoke rising
                 if (self.smokeTics > 0 && self.reactionTime % self.smokeTics == 0) {{
                     let grey = Random[Doomify](110, 160);
@@ -540,8 +551,12 @@ pub fn weapon(p: &str) -> String {
 
             States {{
             Bounce:
-                "####" "#" 0 A_StartSound(invoker.bounceSound, CHAN_BODY);
-                Goto Spawn;
+                // back to the Spawn of what it is (a Goto here would be this class's, which has
+                // none: the engine's, invisible for good)
+                "####" "#" 0 {{
+                    self.A_StartSound(self.bounceSound, CHAN_BODY);
+                    return self.ResolveState("Spawn");
+                }}
             Death:
                 "####" "#" -1;
                 Stop;
