@@ -24,12 +24,15 @@ pub fn weapon(p: &str) -> String {
             bool overheated;
             int joltTics;           // the Wunderwaffe jolting to life: the hands shake, the screen shocks
             int nextClick;          // when an empty weapon may click again, the trigger held
+            meta String scope;      // a sniper's scope: its graphic, over the screen once aimed in
+            bool scoped;            // aimed in with a scope: {p}_DoomifyScope draws it
 
             property AimZoom: aimZoom;
             property Regenerates: regenerates;
             property BurnSound: burnSound;
             property IgniteSound: igniteSound;
             property CooldownSound: cooldownSound;
+            property Scope: scope;
 
             const JOLT_TICS = 24;
             const JOLT_RANGE = 160;     // how far the reload's jolt reaches
@@ -87,6 +90,32 @@ pub fn weapon(p: &str) -> String {
                 invoker.zoomed = true;
                 invoker.BobRangeX = 0.15;
                 invoker.BobRangeY = 0.15;
+            }}
+
+            // Aimed in all the way: a sniper's scope comes up (ZoomReady)
+            action void ScopeUp() {{
+                invoker.scoped = true;
+            }}
+
+            // A weapon with a scope draws its layer by its own alpha (Select), which hides the gun
+            // behind the scope; the engine resets the layer for the next weapon
+            action void ScopeLayer() {{
+                A_OverlayFlags(PSP_WEAPON, PSPF_ALPHA | PSPF_FORCEALPHA, true);
+            }}
+
+            // The gun hides behind the scope until it is no longer aimed or in hand
+            void HideForScope() {{
+                if (self.owner == null || self.owner.player == null) {{
+                    return;
+                }}
+                let inHand = self.owner.player.ReadyWeapon == self;
+                if (!self.zoomed || !inHand) {{
+                    self.scoped = false;
+                }}
+                let layer = self.owner.player.FindPSprite(PSP_WEAPON);
+                if (inHand && self.scope != "" && layer != null && layer.caller == self) {{
+                    layer.alpha = self.scoped? 0.0: 1.0;
+                }}
             }}
 
             // The animations start where the weapon rests, not where the engine raises it from
@@ -194,6 +223,7 @@ pub fn weapon(p: &str) -> String {
             override void DoEffect() {{
                 super.DoEffect();
                 self.Shake();
+                self.HideForScope();
                 if (!self.regenerates || self.owner == null || self.owner.player == null) {{
                     return;
                 }}
@@ -243,8 +273,10 @@ pub fn weapon(p: &str) -> String {
             meta int splashDamage;
             meta Sound impactSound;
             meta bool pulse;            // grows and shrinks as it flies (the Ray Gun's)
+            meta Color flames;          // fire left burning where it lands, tinted this; 0 for none
 
             property TrailColor: trailColor;
+            property Flames: flames;
             property Splash: splash;
             property SplashDamage: splashDamage;
             property ImpactSound: impactSound;
@@ -304,6 +336,9 @@ pub fn weapon(p: &str) -> String {
                 }}
                 self.Burst(24);
                 self.A_AttachLight('DoomifyGlow', DynamicLight.PointLight, self.trailColor, 128, 0);
+                if (self.flames != 0) {{
+                    {p}_DoomifyFire.Spread(self, self.target, 4, 40, 35, max(1, self.splashDamage / 10), self.flames);
+                }}
             }}
 
             States {{
@@ -333,9 +368,185 @@ pub fn weapon(p: &str) -> String {
 
             override void Tick() {{
                 super.Tick();
-                if (!self.bDestroyed && --self.reactionTime <= 0) {{
+                if (self.bDestroyed) {{
+                    return;
+                }}
+                // the stream in the base wad's flames, growing as they leave the barrel
+                if (self.GetAge() % 2 == 0) {{
+                    let fire = {p}_DoomifyFire.Light(self.pos, self.target, 6, size: 0.15 + 0.03 * self.GetAge());
+                    if (fire != null) {{
+                        fire.vel = self.vel * 0.6;
+                    }}
+                }}
+                if (--self.reactionTime <= 0) {{
                     self.Destroy();
                 }}
+            }}
+        }}
+
+        // Fire in the base wad's own flames: the Arch-vile's (Doom 2, Freedoom, Plutonia, TNT), else
+        // a rocket's burst (Doom, which has no Arch-vile), else only embers; tinted when given a
+        // colour (Porter's X2's red), and burning the zombies standing in it while it lasts
+        class {p}_DoomifyFire : Actor {{
+            int life;                   // tics left burning; then it dies down
+            int burnDamage;             // to each zombie in it every BURN_TICS; 0 for looks alone
+            Color tint;                 // its colour, 0 for the flames' own
+
+            const BURN_TICS = 16;
+            const FADE_TICS = 10;
+
+            Default {{
+                RenderStyle "Add";
+                Alpha 0.9;
+                Scale 0.6;
+                Radius 20;
+                Height 48;
+                +NOINTERACTION
+                +FORCEXYBILLBOARD
+                +BRIGHT
+            }}
+
+            // A fire at `pos` for `life` tics; `source` (the player) gets its kills
+            static {p}_DoomifyFire Light(Vector3 pos, Actor source, int life, int burnDamage = 0, Color tint = 0, double size = 0.6) {{
+                let fire = {p}_DoomifyFire(Actor.Spawn('{p}_DoomifyFire', pos));
+                if (fire != null) {{
+                    fire.target = source;
+                    fire.life = life;
+                    fire.burnDamage = burnDamage;
+                    fire.scale = (size, size);
+                    fire.tint = tint;
+                    if (tint != 0) {{
+                        fire.A_SetRenderStyle(fire.alpha, STYLE_AddShaded);
+                        fire.SetShade(tint);
+                    }}
+                }}
+                return fire;
+            }}
+
+            // Fires on the floor around `from` (one where it is, the rest up to `radius` away,
+            // stopped short of walls), lasting about `life` tics
+            static void Spread(Actor from, Actor source, int count, double radius, int life, int burnDamage, Color tint = 0) {{
+                for (let i = 0; i < count; ++i) {{
+                    let angle = 360.0 * i / max(1, count - 1) + FRandom[Doomify](-20, 20);
+                    let distance = i == 0? 0: FRandom[Doomify](0.4, 1) * radius;
+                    if (distance > 0) {{
+                        FLineTraceData wall;
+                        if (from.LineTrace(angle, distance, 0, TRF_THRUACTORS, 4, data: wall)) {{
+                            distance = max(0, wall.Distance - 8);
+                        }}
+                    }}
+                    let spot = from.pos.xy + Actor.AngleToVector(angle, distance);
+                    let floor = level.PointInSector(spot).floorplane.ZatPoint(spot);
+                    let z = from.pos.z - floor < 64? floor: from.pos.z;
+                    let fire = {p}_DoomifyFire.Light((spot, z), source, life + Random[Doomify](-life / 5, life / 5), burnDamage, tint, FRandom[Doomify](0.5, 0.8));
+                    if (fire != null && i == 0) {{
+                        fire.A_AttachLight('DoomifyFire', DynamicLight.RandomFlickerLight, tint != 0? tint: Color(255, 140, 50), 96, 128);
+                    }}
+                }}
+            }}
+
+            override void Tick() {{
+                super.Tick();
+                if (self.bDestroyed) {{
+                    return;
+                }}
+                if (--self.life <= 0) {{
+                    self.alpha -= self.Default.alpha / FADE_TICS;
+                    if (self.alpha <= 0) {{
+                        self.Destroy();
+                    }}
+                    return;
+                }}
+                if (self.burnDamage > 0 && self.GetAge() % BURN_TICS == 0) {{
+                    self.Burn();
+                }}
+            }}
+
+            // Every zombie standing in it takes its damage, as fire (the zombies' burning death)
+            void Burn() {{
+                let things = BlockThingsIterator.Create(self, self.radius + 32);
+                while (things.Next()) {{
+                    let zombie = things.thing;
+                    if (zombie != null && zombie.bIsMonster && zombie.bShootable && zombie.health > 0
+                            && self.Distance2D(zombie) < self.radius + zombie.radius && zombie.pos.z - self.pos.z < self.height
+                            && self.pos.z - zombie.pos.z < zombie.height) {{
+                        zombie.DamageMobj(self, self.target, self.burnDamage, 'Fire', DMG_THRUSTLESS);
+                    }}
+                }}
+            }}
+
+            void Ember() {{
+                self.A_SpawnParticle(self.tint != 0? self.tint: Color(255, 140, 50), SPF_FULLBRIGHT, 16, FRandom[Doomify](2, 5) * self.scale.x * 2, 0,
+                    FRandom[Doomify](-8, 8), FRandom[Doomify](-8, 8), FRandom[Doomify](0, 8),
+                    FRandom[Doomify](-0.3, 0.3), FRandom[Doomify](-0.3, 0.3), FRandom[Doomify](0.8, 1.6),
+                    startalphaf: self.alpha, fadestepf: 0.06);
+            }}
+
+            States {{
+            Spawn:
+                TNT1 A 0 NoDelay {{
+                    if (TexMan.CheckForTexture("FIREA0", TexMan.Type_Sprite).IsValid()) {{
+                        return self.ResolveState("ArchVile");
+                    }}
+                    if (TexMan.CheckForTexture("MISLB0", TexMan.Type_Sprite).IsValid()) {{
+                        return self.ResolveState("Rocket");
+                    }}
+                    return self.ResolveState("Embers");
+                }}
+            ArchVile:
+                // only the frames standing on the ground: from E on, the flame lifts off
+                FIRE ABCDCB 2;
+                Loop;
+            Rocket:
+                MISL BCDC 3;
+                Loop;
+            Embers:
+                TNT1 A 1 Ember;
+                Loop;
+            }}
+        }}
+
+        // A molotov cocktail: it breaks where it lands, on a wall, the floor or a zombie, and the
+        // floor around it burns for a while
+        class {p}_DoomifyMolotov : Actor {{
+            meta int burnDamage;        // to each zombie in its fire, twice a second
+            meta int spreadRadius;      // how far its fire spreads
+            meta Sound breakSound;
+
+            property BurnDamage: burnDamage;
+            property SpreadRadius: spreadRadius;
+            property BreakSound: breakSound;
+
+            const BURN_LIFE = 175;      // tics its fire burns: World at War's five seconds
+
+            Default {{
+                Projectile;
+                -NOGRAVITY
+                Gravity 0.6;
+                Radius 4;
+                Height 6;
+                Speed 22;
+                Scale 0.5;
+                DamageType "Fire";
+                {p}_DoomifyMolotov.BurnDamage 20;
+                {p}_DoomifyMolotov.SpreadRadius 72;
+            }}
+
+            override void Tick() {{
+                super.Tick();
+                if (!self.bDestroyed && self.bMissile) {{
+                    self.angle += 24;
+                }}
+            }}
+
+            States {{
+            Death:
+                TNT1 A 0 {{
+                    self.A_StartSound(self.breakSound, CHAN_AUTO);
+                    {p}_DoomifyFire.Spread(self, self.target, 8, self.spreadRadius, BURN_LIFE, self.burnDamage);
+                }}
+                TNT1 A 1;
+                Stop;
             }}
         }}
 
@@ -706,6 +917,33 @@ pub fn shock(p: &str) -> String {
                 }} else {{
                     PPShader.SetEnabled("{p}_Shock", false);
                 }}
+            }}
+        }}
+    "#}
+}
+
+/// A sniper's scope over the screen while it is aimed in: the graphic as tall as the screen in
+/// the middle, black on both sides.
+pub fn scope(p: &str) -> String {
+    formatdoc! {r#"
+        // A sniper's scope over the screen, aimed in ({p}_DoomifyWeapon.Scope)
+        class {p}_DoomifyScope : EventHandler {{
+            override void RenderOverlay(RenderEvent e) {{
+                let player = players[consolePlayer];
+                let weapon = {p}_DoomifyWeapon(player.ReadyWeapon);
+                if (weapon == null || !weapon.scoped || weapon.scope == "" || player.camera != player.mo) {{
+                    return;
+                }}
+                let picture = TexMan.CheckForTexture(weapon.scope, TexMan.Type_Any);
+                if (!picture.IsValid()) {{
+                    return;
+                }}
+                let width = Screen.GetWidth();
+                let height = Screen.GetHeight();
+                let left = (width - height) / 2;
+                Screen.DrawTexture(picture, false, left, 0, DTA_DestWidth, height, DTA_DestHeight, height);
+                Screen.Clear(0, 0, left, height, Color(255, 0, 0, 0));
+                Screen.Clear(left + height, 0, width, height, Color(255, 0, 0, 0));
             }}
         }}
     "#}

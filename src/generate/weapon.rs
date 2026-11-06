@@ -285,7 +285,9 @@ fn shot(project: &Project, built: &Built, aimed: bool) -> String {
             project.class(built.id)
         ),
         Kind::Flame => format!("TNT1 A 0 ShootFlame(\"{}Shot\");", project.class(built.id)),
-        Kind::Grenade | Kind::Monkey | Kind::Mine | Kind::Melee | Kind::Drink => String::new(),
+        Kind::Grenade | Kind::Monkey | Kind::Mine | Kind::Molotov | Kind::Melee | Kind::Drink => {
+            String::new()
+        }
     }
 }
 
@@ -345,9 +347,13 @@ fn fire_state(
 fn states(project: &Project, built: &Built) -> Code {
     let weapon = built.weapon;
     let tesla = weapon.kind == Kind::Tesla;
-    let thrown = matches!(weapon.kind, Kind::Grenade | Kind::Monkey | Kind::Mine);
+    let thrown = weapon.thrown();
     // equipment has no magazine: it is empty when its reserve is
-    let when_empty = if thrown { "WhenNoAmmo" } else { "WhenNoActiveAmmo" };
+    let when_empty = if thrown {
+        "WhenNoAmmo"
+    } else {
+        "WhenNoActiveAmmo"
+    };
     let melee = weapon.kind == Kind::Melee;
     let gun = !thrown && !melee;
     let aims = gun && built.has(&variant("ads_idle", plan::full(weapon)));
@@ -382,6 +388,9 @@ fn states(project: &Project, built: &Built) -> Code {
         .indented(|code| {
             code.always("TNT1 A 0 AtRest;")
                 .always("TNT1 A 0 ResetClock;")
+                .when(weapon.view.scope.is_some(), |code| {
+                    code.always("TNT1 A 0 ScopeLayer;")
+                })
                 .when(built.has(&variant("first_raise", full)), |code| {
                     code.always("TNT1 A 0 WhenFirstRaise(\"FirstRaise\");")
                 })
@@ -772,6 +781,10 @@ fn aim_states(
         .always("ZoomReady:")
         .indented(|code| {
             code.always("TNT1 A 0 WhenShouldZoomOut(\"ZoomOut\");")
+                // aimed in: the scope over the screen, the gun hidden
+                .when(weapon.view.scope.is_some(), |code| {
+                    code.always("TNT1 A 0 ScopeUp;")
+                })
                 .when(built.has("ads_empty_idle"), |code| {
                     code.always("TNT1 A 0 WhenNoActiveAmmo(\"ZoomEmptyIdle\");")
                 })
@@ -899,6 +912,11 @@ fn thrown_states(code: Code, project: &Project, built: &Built) -> Code {
     code.always("Fire:")
         .indented(|code| {
             code.always("TNT1 A 0 WhenNoAmmo(\"EmptyIdle\");")
+                .when(!held.is_empty(), |code| {
+                    code.when_some(built.sound_line("hold_fire", "CHAN_WEAPON"), |c, l| {
+                        c.always(l)
+                    })
+                })
                 .append(frames(Code::new(), held, Tic::Plain, &held_events))
         })
         .when_some(held.last(), |code, last| {
@@ -1181,7 +1199,7 @@ fn wall_drawing(project: &Project, built: &Built) -> Code {
                     //$Title "{name} Wall Buy"
                     HH_WallBuy.Weapon "{class}";
                     HH_WallBuy.Cost {cost};
-                    Scale 0.5;
+                    Scale {scale:.2};
                 }}
 
                 States {{
@@ -1190,7 +1208,7 @@ fn wall_drawing(project: &Project, built: &Built) -> Code {
                     Stop;
                 }}
             }}
-        "#, name = weapon.name, cost = wall.cost})
+        "#, name = weapon.name, cost = wall.cost, scale = wall.scale})
         },
     )
 }
@@ -1279,10 +1297,10 @@ fn shot_class(project: &Project, built: &Built) -> Code {
                         {p}_DoomifyShot.TrailColor "{color}";
                         {p}_DoomifyShot.Splash {splash};
                         {p}_DoomifyShot.SplashDamage {damage};
-                        {p}_DoomifyShot.ImpactSound "{impact}";{look_defaults}
+                        {p}_DoomifyShot.ImpactSound "{impact}";{flames}{look_defaults}
                     }}{look_states}
                 }}
-            "#, splash = weapon.fire.splash})
+            "#, splash = weapon.fire.splash, flames = weapon.fire.flames.as_ref().map(|color| format!("\n        {p}_DoomifyShot.Flames \"{color}\";")).unwrap_or_default()})
         })
         .otherwise_when(weapon.kind == Kind::Tesla, |code| {
             code.always(formatdoc! {r#"
@@ -1397,6 +1415,55 @@ fn shot_class(project: &Project, built: &Built) -> Code {
                 .always("}")
                 .always("")
         })
+        .otherwise_when(weapon.kind == Kind::Molotov, |code| {
+            code.append(molotov_class(project, built, damage, &impact))
+        })
+}
+
+/// A molotov: tumbling through the air until it breaks (its base class burns where it lands).
+fn molotov_class(project: &Project, built: &Built, damage: u32, impact: &str) -> Code {
+    let weapon = built.weapon;
+    let class = project.class(built.id);
+    let p = &project.config.prefix;
+    let pickup = built.pickup.clone().unwrap_or(Frame::Empty).state();
+    let tumble = built.get("tumble");
+    code_class(
+        format!("class {class}Shot : {p}_DoomifyMolotov {{"),
+        |code| {
+            code.always("Default {")
+                .indented(|code| {
+                    code.always(format!("{p}_DoomifyMolotov.BurnDamage {damage};"))
+                        .always(format!(
+                            "{p}_DoomifyMolotov.SpreadRadius {};",
+                            weapon.fire.splash.max(48)
+                        ))
+                        .always(format!("{p}_DoomifyMolotov.BreakSound \"{impact}\";"))
+                })
+                .always("}")
+                .gap()
+                .always("States {")
+                .always("Spawn:")
+                .indented(|code| {
+                    code.when(!tumble.is_empty(), |code| {
+                        runs(code, tumble, 2).always("Loop;")
+                    })
+                    .otherwise(|code| {
+                        code.always(format!("{} {} -1;", pickup.0, pickup.1))
+                            .always("Stop;")
+                    })
+                })
+                .always("}")
+        },
+    )
+}
+
+/// A class: its first line, its body indented, its closing brace and a blank line.
+fn code_class(first: String, body: impl FnOnce(Code) -> Code) -> Code {
+    Code::new()
+        .always(first)
+        .indented(body)
+        .always("}")
+        .always("")
 }
 
 /// How long a Betty set off is in the air before it goes off (`Leap` in its base class).
@@ -1465,7 +1532,7 @@ pub fn file(project: &Project, built: &Built) -> String {
     let weapon = built.weapon;
     let p = &project.config.prefix;
     let class = project.class(built.id);
-    let thrown = matches!(weapon.kind, Kind::Grenade | Kind::Monkey | Kind::Mine);
+    let thrown = weapon.thrown();
     let melee = weapon.kind == Kind::Melee;
     let ammo = !melee;
     let aim_zoom = weapon
@@ -1526,6 +1593,12 @@ pub fn file(project: &Project, built: &Built) -> String {
             },
         )
         .always(format!("{p}_DoomifyWeapon.AimZoom {aim_zoom:.2};"))
+        .when(weapon.view.scope.is_some(), |code| {
+            code.always(format!(
+                "{p}_DoomifyWeapon.Scope \"{}\";",
+                super::scope_name(weapon)
+            ))
+        })
         .when(weapon.kind == Kind::Flame, |code| {
             let named = |role: &str| {
                 weapon

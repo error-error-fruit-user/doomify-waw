@@ -26,6 +26,8 @@ damage = 1000
 splash = 80
 speed = 46
 color = "ff3a3a"
+# red flames left burning where it lands, in the base wad's own fire
+flames = "ff2a1a"
 
 [animations]
 idle = "viewmodel_ray_gun_idle"

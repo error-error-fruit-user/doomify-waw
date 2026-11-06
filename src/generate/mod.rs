@@ -10,6 +10,11 @@ use std::collections::BTreeMap;
 use weapon::{Built, sound};
 
 /// Every file of text, by its path in the pk3.
+/// The graphic of a weapon's scope (`view.scope`): its sprite code and SCOPE (`PTSCOPE`).
+pub fn scope_name(weapon: &crate::weapon::Weapon) -> String {
+    format!("{}SCOPE", weapon.sprite.to_string().to_uppercase())
+}
+
 pub fn files(
     project: &Project,
     built: &[Built],
@@ -19,6 +24,7 @@ pub fn files(
     let mut files = BTreeMap::new();
     files.insert("zscript/doomify/base.zs".into(), base::weapon(p));
     files.insert("zscript/doomify/shock.zs".into(), base::shock(p));
+    files.insert("zscript/doomify/scope.zs".into(), base::scope(p));
     for weapon in built {
         files.insert(
             format!("zscript/doomify/{}.zs", weapon.id),
@@ -134,9 +140,9 @@ fn mapinfo(project: &Project, built: &[Built]) -> String {
         .filter(|(id, _)| built.iter().any(|b| b.id == id.as_ref()))
         .collect();
     Code::new()
-        .always("// The Wunderwaffe's shock on screen, and the wall drawings' editor numbers (doomify.toml)")
+        .always("// The Wunderwaffe's shock and the scopes on screen, and the wall drawings' editor numbers (doomify.toml)")
         .block("GameInfo", |code| {
-            code.always(format!("AddEventHandlers = \"{p}_DoomifyShock\""))
+            code.always(format!("AddEventHandlers = \"{p}_DoomifyShock\", \"{p}_DoomifyScope\""))
                 // 🧍 the map's marine with World at War's start items, over Doom's (doomify.toml)
                 .when(project.config.player.is_some(), |code| {
                     code.always(format!("PlayerClasses = \"{p}_Player\", \"DoomPlayer\""))

@@ -51,4 +51,6 @@ first_raise = "weap_raise_plr"
 drop = "weap_putaway_plr"
 
 [view]
+# World at War's Russian scope over the screen once aimed in
+scope = "scope_overlay_russian"
 ads_fov = 30

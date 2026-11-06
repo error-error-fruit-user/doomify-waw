@@ -8,6 +8,8 @@
 //! - `sounds/<alias>_<n>.wav` (or `.xwm`): every sound role's alias and every alias a clip's
 //!   notetracks play, each variant numbered;
 //! - `chalk.png`: its wall drawing;
+//! - `scope.png`: its scope, if it has one (also pulled by itself, [`pull_scope`], into a pull
+//!   from before it had one);
 //!
 //! and a sound set's TOML (see `sounds.rs`) pulls its aliases. `pull.json` says what came out:
 //! clip lengths and notetracks, and each alias's files.
@@ -168,17 +170,10 @@ fn pull_weapon(game: &Game, weapon: &Weapon, out: &Path) -> Result<Pulled> {
         pulled.clips.extend(clips_of(&glb)?);
     }
     if let Some(wall) = &weapon.wall {
-        let member = format!("images/{}.iwi", wall.chalk).to_lowercase();
-        let catalog = game.catalog()?;
-        let asset = catalog
-            .iter()
-            .find(|a| a.member.to_lowercase() == member)
-            .with_context(|| format!("The wall drawing {member} is not in the IWDs"))?;
-        let png = texture::iwi_png(&archive::read_asset(asset, archive::DEFAULT_LIMIT)?)
-            .with_context(|| format!("Cannot convert {member}"))?;
-        fs::write(out.join("chalk.png"), png)?;
+        pull_image(game, &wall.chalk, "wall drawing", &out.join("chalk.png"))?;
         pulled.chalk = true;
     }
+    pull_scope(game, weapon, out)?;
     // The roles' sounds, and whatever the clips' notetracks play that is a sound.
     let mut aliases: Vec<String> = weapon.sounds.values().map(|a| a.to_string()).collect();
     for clip in pulled.clips.values() {
@@ -186,6 +181,28 @@ fn pull_weapon(game: &Game, weapon: &Weapon, out: &Path) -> Result<Pulled> {
     }
     pull_sounds(game, aliases, out, &mut pulled)?;
     Ok(pulled)
+}
+
+/// An image in the IWDs (`images/<name>.iwi`) as a PNG.
+fn pull_image(game: &Game, name: &str, what: &str, png: &Path) -> Result<()> {
+    let member = format!("images/{name}.iwi").to_lowercase();
+    let catalog = game.catalog()?;
+    let asset = catalog
+        .iter()
+        .find(|a| a.member.to_lowercase() == member)
+        .with_context(|| format!("The {what} {member} is not in the IWDs"))?;
+    let bytes = texture::iwi_png(&archive::read_asset(asset, archive::DEFAULT_LIMIT)?)
+        .with_context(|| format!("Cannot convert {member}"))?;
+    fs::write(png, bytes)?;
+    Ok(())
+}
+
+/// A weapon's scope (`view.scope`) as `scope.png` in its pull folder `out`, if it has one.
+pub fn pull_scope(game: &Game, weapon: &Weapon, out: &Path) -> Result<()> {
+    if let Some(scope) = &weapon.view.scope {
+        pull_image(game, scope, "scope", &out.join("scope.png"))?;
+    }
+    Ok(())
 }
 
 /// Writes every variant of every alias in `wanted` that the game has; notetracks that are not

@@ -1,0 +1,42 @@
+# Molotov cocktail: World at War's molotov (loaded in Der Riese, though its box never gives it).
+# Equipment: fire held lights its rag, let go throws it; it breaks where it lands and the floor
+# around burns, in the base wad's own flames. Players get three, and three more every round (up
+# to four).
+name = "Molotov Cocktail"
+class = "Molotov"
+sprite = "MO"
+kind = "molotov"
+slot = 8
+box_weight = 1
+
+[game]
+weapon = "molotov"
+models = ["viewmodel_hands", "viewmodel_rus_molotov_grenade"]
+world = "weapon_rus_molotov_grenade"
+
+[ammo]
+magazine = 4
+give = 3
+# three more every round, up to four
+round = 3
+
+[fire]
+time = 0.4
+# World at War's, to each zombie in the fire twice a second
+damage = 150
+# how far the fire spreads where it breaks
+splash = 72
+
+[animations]
+idle = "viewmodel_molotov_idle"
+fire = "viewmodel_molotov_throw"
+hold_fire = "viewmodel_molotov_light"
+raise = "viewmodel_molotov_idle"
+drop = "viewmodel_molotov_idle"
+
+[sounds]
+throw = "weap_molotov_throw"
+# the lighter, as fire held lights the rag
+hold_fire = "weap_molotov_light"
+raise = "weap_raise_plr"
+impact = "weap_molotov_impact"

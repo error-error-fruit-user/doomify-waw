@@ -137,6 +137,10 @@ fn rendered(mut table: toml::Table) -> toml::Table {
     if let Some(toml::Value::Table(wall)) = table.get_mut("wall") {
         wall.retain(|key, _| key == "chalk");
     }
+    // the scope is pulled on its own (`scope.png`), and isn't rendered
+    if let Some(toml::Value::Table(view)) = table.get_mut("view") {
+        view.remove("scope");
+    }
     table
 }
 

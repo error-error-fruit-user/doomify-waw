@@ -51,8 +51,8 @@ GUN = (0.45, -0.08, -0.12)
 RENDER_PARTS = {
     "views": {"kinds": "*"},  # the scene, the views and the world model's picture
     "bottle glass": {"kinds": "drink"},  # see_through: a perk bottle's glass shows its drink, and its open neck is whole
-    "headroom": {"kinds": "grenade monkey mine melee"},  # canvas: equipment's views rendered with room above the screen
-    "thrown": {"kinds": "grenade monkey mine", "changed": True},  # render_world: tumbling (the Betty too), rocking to rest on the floor and the world model's animation
+    "headroom": {"kinds": "grenade monkey mine molotov melee"},  # canvas: equipment's views rendered with room above the screen
+    "thrown": {"kinds": "grenade monkey mine molotov", "changed": True},  # render_world: tumbling (the Betty too), rocking to rest on the floor and the world model's animation
 }
 
 

@@ -381,6 +381,13 @@ mod tests {
             "models = [\"hands\", \"gun\"]\nworld = \"w\"",
         ));
         assert_eq!(world_renders(&mine), ["world", "tumble"]);
+        // a molotov only tumbles: it breaks where it lands
+        let molotov = weapon(&format!("kind = \"molotov\"\n{BASE}").replace(
+            "models = [\"hands\", \"gun\"]",
+            "models = [\"hands\", \"gun\"]\nworld = \"w\"",
+        ));
+        assert_eq!(headroom(&molotov), HEADROOM);
+        assert_eq!(world_renders(&molotov), ["world", "tumble"]);
     }
 
     #[test]

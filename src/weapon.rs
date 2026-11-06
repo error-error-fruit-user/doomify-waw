@@ -54,6 +54,8 @@ pub const SOUND_ROLES: &[&str] = &[
     "happy",
     "hum",
     "throw",
+    // equipment's hold_fire animation starting: the molotov's lighter
+    "hold_fire",
     // the flamethrower: burning (looped while the trigger is held), and cooling down after
     "loop",
     "cooldown",
@@ -83,6 +85,8 @@ pub enum Kind {
     Monkey,
     /// A Bouncing Betty, planted on the floor.
     Mine,
+    /// A molotov cocktail: thrown, it breaks where it lands and leaves the floor burning.
+    Molotov,
     /// A knife: no ammo, swung.
     Melee,
     /// A perk's bottle (the map's own machine sells it).
@@ -202,6 +206,10 @@ pub struct Fire {
     pub arcs: u32,
     #[serde(default)]
     pub arc_range: u32,
+    /// Fire left burning where a projectile lands, tinted this colour (RRGGBB; Porter's X2's
+    /// red), in the base wad's own flames.
+    #[serde(default)]
+    pub flames: Option<Text>,
     /// The colour of the projectile's light and particles (RRGGBB).
     #[serde(default)]
     pub color: Option<Text>,
@@ -221,6 +229,14 @@ pub struct Wall {
     pub cost: u32,
     /// The chalk drawing's image in the IWDs.
     pub chalk: Text,
+    /// How big the drawing is on the wall (the guns' are 0.5; the tall grenade bag and mine
+    /// drawings are smaller).
+    #[serde(default = "half")]
+    pub scale: f64,
+}
+
+fn half() -> f64 {
+    0.5
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -249,6 +265,10 @@ pub struct View {
     /// bulbs on; before it they are dark, at it the gun jolts to life.
     #[serde(default)]
     pub lights_on: Option<Text>,
+    /// A sniper's scope: its image in the IWDs (`scope_overlay_russian`), over the screen once
+    /// it has aimed in, the gun hidden, as World at War draws its weapons' overlayMaterial.
+    #[serde(default)]
+    pub scope: Option<Text>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -337,16 +357,20 @@ impl Weapon {
             );
             ensure!(
                 self.thrown(),
-                "only grenades, the monkey and mines have a game.world_animation"
+                "only grenades, the monkey, mines and molotovs have a game.world_animation"
             );
         }
+        ensure!(
+            self.view.scope.is_none() || self.view.ads_fov.is_some(),
+            "view.scope needs view.ads_fov: a scope shows once the weapon has aimed in"
+        );
         ensure!(
             self.ammo.round == 0 || !matches!(self.kind, Kind::Melee | Kind::Drink),
             "the knife and drinks have no ammo for ammo.round"
         );
         ensure!(
             !self.animations.contains_key("hold_fire") || self.thrown(),
-            "only grenades, the monkey and mines have an animations.hold_fire"
+            "only grenades, the monkey, mines and molotovs have an animations.hold_fire"
         );
         if self.kind == Kind::Drink {
             ensure!(
@@ -401,7 +425,7 @@ impl Weapon {
         }
         match self.kind {
             Kind::Melee | Kind::Drink => {}
-            Kind::Grenade | Kind::Monkey | Kind::Mine => ensure!(
+            Kind::Grenade | Kind::Monkey | Kind::Mine | Kind::Molotov => ensure!(
                 self.animations.contains_key("fire"),
                 "animations.fire (the throw) is required"
             ),
@@ -447,16 +471,20 @@ impl Weapon {
         clips
     }
 
-    /// Whether it is thrown or planted (grenades, the monkey, mines): it lies in the world after.
+    /// Whether it is thrown or planted (grenades, the monkey, mines, molotovs): it lies in the
+    /// world after (a molotov only until it breaks).
     pub fn thrown(&self) -> bool {
-        matches!(self.kind, Kind::Grenade | Kind::Monkey | Kind::Mine)
+        matches!(
+            self.kind,
+            Kind::Grenade | Kind::Monkey | Kind::Mine | Kind::Molotov
+        )
     }
 
     /// Whether the weapon has a magazine to reload.
     pub fn reloads(&self) -> bool {
         !matches!(
             self.kind,
-            Kind::Melee | Kind::Grenade | Kind::Monkey | Kind::Mine
+            Kind::Melee | Kind::Grenade | Kind::Monkey | Kind::Mine | Kind::Molotov
         )
     }
 

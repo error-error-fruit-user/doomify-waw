@@ -6,7 +6,7 @@ use crate::{
     generate::{self, weapon::Built},
     plan,
     project::Project,
-    script::Pulled,
+    script::{self, Pulled},
     sprites::{self, Anchor, Sprites},
 };
 use anyhow::{Context, Result, bail, ensure};
@@ -117,6 +117,23 @@ pub fn build(project: &Project, options: &Options) -> Result<()> {
                 .as_deref()
                 != Some(mark.as_str())
     };
+    // 🔭 a scope given to a weapon pulled before it had one: only its image, from the IWDs
+    let scopeless: Vec<&String> = ids
+        .iter()
+        .filter(|id| {
+            let pulled = pull(&weapon_key(id));
+            project.weapons[*id].view.scope.is_some()
+                && pulled.join("pull.json").is_file()
+                && !pulled.join("scope.png").is_file()
+        })
+        .collect();
+    if !options.offline && !options.force && !scopeless.is_empty() {
+        let game = Game::find(options.pid, options.wait)?;
+        for id in scopeless {
+            script::pull_scope(&game, &project.weapons[id], &pull(&weapon_key(id)))?;
+            say(&format!("Pulled {id}'s scope"));
+        }
+    }
     let cached = !options.force
         && ids.iter().all(|id| {
             pull(&weapon_key(id)).join("pull.json").is_file() && rendered_all(id) && !stale(id)
@@ -280,6 +297,29 @@ fn assemble(project: &Project, ids: &[String], work: &Path, say: fn(&str)) -> Re
         "Gathered {} sounds",
         sounds.values().map(Vec::len).sum::<usize>()
     ));
+
+    // Scopes: the image over the screen, named for the weapon's sprite
+    for id in ids {
+        let weapon = &project.weapons[id];
+        if weapon.view.scope.is_some() {
+            let source = work
+                .join("pull")
+                .join(project.weapon_key(id))
+                .join("scope.png");
+            ensure!(
+                source.is_file(),
+                "{id}'s scope wasn't pulled; run doomify without --offline"
+            );
+            fs::create_dir_all(out.join("graphics/doomify"))?;
+            fs::copy(
+                &source,
+                out.join("graphics/doomify").join(format!(
+                    "{}.png",
+                    generate::scope_name(weapon).to_lowercase()
+                )),
+            )?;
+        }
+    }
 
     // Sprites and code, a weapon per core at a time.
     let one = |index: usize| -> Result<Built> {
