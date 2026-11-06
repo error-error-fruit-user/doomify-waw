@@ -1,5 +1,6 @@
 # Stielhandgranate: Der Riese's stick grenade (stielhandgranate). Equipment: the equipment key
-# brings it up, and players start with two. Its blast is World at War's frag grenade's.
+# brings it up, and players start with two and get two more every round (up to four). Its blast is
+# World at War's frag grenade's.
 name = "Stielhandgranate"
 class = "Stielhandgranate"
 sprite = "SG"
@@ -15,6 +16,8 @@ world = "weapon_ger_nebelhandgrenate"
 [ammo]
 magazine = 4
 give = 2
+# two more every round, up to four
+round = 2
 
 [fire]
 time = 0.4

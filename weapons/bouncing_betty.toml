@@ -1,5 +1,5 @@
 # Bouncing Betty: Der Riese's mine_bouncing_betty. Equipment: planted on the floor, it jumps and
-# goes off when a zombie comes close.
+# goes off when a zombie comes close. Players carrying it get two more every round, up to two.
 name = "Bouncing Betty"
 class = "BouncingBetty"
 sprite = "BB"
@@ -15,6 +15,8 @@ world = "weapon_bbetty_mine"
 [ammo]
 magazine = 2
 give = 2
+# two more every round, up to two
+round = 2
 
 [fire]
 time = 1

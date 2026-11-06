@@ -117,6 +117,10 @@ pub struct Ammo {
     /// Reserve rounds the weapon comes with.
     #[serde(default)]
     pub give: u32,
+    /// Reserve rounds every player carrying it gets at the start of each round after the first,
+    /// up to the most carried (World at War's two grenades a round).
+    #[serde(default)]
+    pub round: u32,
     /// A reload only takes what the magazine is missing.
     #[serde(default = "yes")]
     pub partial: bool,
@@ -336,6 +340,10 @@ impl Weapon {
                 "only grenades, the monkey and mines have a game.world_animation"
             );
         }
+        ensure!(
+            self.ammo.round == 0 || !matches!(self.kind, Kind::Melee | Kind::Drink),
+            "the knife and drinks have no ammo for ammo.round"
+        );
         ensure!(
             !self.animations.contains_key("hold_fire") || self.thrown(),
             "only grenades, the monkey and mines have an animations.hold_fire"

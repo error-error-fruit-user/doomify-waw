@@ -1489,6 +1489,9 @@ pub fn file(project: &Project, built: &Built) -> String {
         .when(ammo, |code| {
             code.always(format!("Weapon.AmmoType \"{class}Ammo\";"))
                 .always(format!("Weapon.AmmoGive {};", weapon.ammo.give))
+                .when(weapon.ammo.round > 0, |code| {
+                    code.always(format!("HH_Weapon.RoundAmmo {};", weapon.ammo.round))
+                })
         })
         .when(!thrown && !melee, |code| {
             code.always(format!("HH_Weapon.ActiveAmmo {};", weapon.ammo.magazine))
